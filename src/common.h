@@ -24,6 +24,14 @@ typedef uint32_t vaddr_t;
         while (1) {}                                                           \
     } while (0)
 
+#define ASSERT(condition)                                                      \
+    do {                                                                       \
+        if (!condition) {                                                      \
+            printf("ASSERT failed at %s:%d\n", __FILE__, __LINE__);            \
+            while (1) {}                                                       \
+        }                                                                      \
+    } while (0)                                                                \
+
 void *memset(void *buf, char c, size_t n);
 void *memcpy(void *dst, const void *src, size_t n);
 char *strcpy(char *dst, const char *src);
