@@ -7,6 +7,9 @@ typedef unsigned int uint32_t;
 typedef uint32_t size_t;
 
 extern char __bss[], __bss_end[], __stack_top[];
+extern char __free_ram[], __free_ram_end[];
+
+const uint32_t HEAP_SIZE = 2 * 1024 * 1024;
 
 __attribute__((naked))
 __attribute__((aligned(4)))
@@ -96,10 +99,16 @@ void handle_trap(struct trap_frame *f) {
 
 void kernel_main(void) {
     memset(__bss, 0, (size_t) __bss_end - (size_t) __bss); // Set globals (bss section) to 0
-    printf("\n\nHello, World!\n");
-    printf("1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
+    printf("\n\n| It's alive!\n");
 
     WRITE_CSR(stvec, (uint32_t) kernel_entry); // Register the trap handler
+    printf("| Exceptions can now be handled!\n");
+
+    heap::init((paddr_t)(__free_ram), (size_t)HEAP_SIZE); // Initialize the heap
+    printf("| Initialized the heap\n");
+    pallocator::init((paddr_t)(__free_ram + HEAP_SIZE), (size_t)(__free_ram_end - __free_ram - HEAP_SIZE)); // Initialize the physical memory allocator
+    printf("| Initialized the physical memory allocator\n");
+
     __asm__ __volatile__("unimp"); // Triggers an exception
 
     for (;;) {

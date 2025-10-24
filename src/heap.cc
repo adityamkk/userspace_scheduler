@@ -1,8 +1,11 @@
 #include "heap.h"
+#include "spinlock.h"
 
 // ChatGPT wrote this
 
 namespace heap {
+
+Spinlock heapLock;
 
 // ===========================================================
 // Basic block header
@@ -27,6 +30,7 @@ static BlockHeader* free_list = 0;
 // ===========================================================
 
 void init(paddr_t start, size_t size) {
+    heapLock = {};
     heap_start = (BlockHeader*) start;
     heap_total_size = size;
 
@@ -49,6 +53,7 @@ void* malloc(size_t size) {
     if (size & 3)
         size = (size + 3) & ~3;
 
+    heapLock.lock();
     BlockHeader* prev = 0;
     BlockHeader* current = free_list;
 
@@ -78,6 +83,7 @@ void* malloc(size_t size) {
                 free_list = current->next;
             }
 
+            heapLock.unlock();
             return (void*)(current + 1);
         }
 
@@ -86,6 +92,7 @@ void* malloc(size_t size) {
     }
 
     // no free block found
+    heapLock.unlock();
     return 0;
 }
 
@@ -97,6 +104,7 @@ void free(void* ptr) {
     if (!ptr)
         return;
 
+    heapLock.lock();
     BlockHeader* block = ((BlockHeader*)ptr) - 1;
     block->free = 1;
 
@@ -119,6 +127,39 @@ void free(void* ptr) {
         }
         current = current->next;
     }
+    heapLock.unlock();
 }
 
 } // namespace heap
+
+/*****************/
+/* C++ operators */
+/*****************/
+
+void* operator new(size_t size) {
+    void* p = heap::malloc(size);
+    if (p == 0) PANIC("out of memory");
+    return p;
+}
+
+void operator delete(void* p) noexcept {
+    return heap::free(p);
+}
+
+void operator delete(void* p, size_t sz) {
+    return heap::free(p);
+}
+
+void* operator new[](size_t size) {
+    void* p = heap::malloc(size);
+    if (p == 0) PANIC("out of memory");
+    return p;
+}
+
+void operator delete[](void* p) noexcept {
+    return heap::free(p);
+}
+
+void operator delete[](void* p, size_t sz) {
+    return heap::free(p);
+}
