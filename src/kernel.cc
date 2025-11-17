@@ -10,6 +10,79 @@ extern char __bss[], __bss_end[], __stack_top[];
 extern char __free_ram[], __free_ram_end[];
 
 const uint32_t HEAP_SIZE = 2 * 1024 * 1024;
+const int MAX_HARTS = 16;
+
+volatile uint32_t hart_boot_count = 0;
+
+/* boot_lock states:
+ * 0 = not taken (no init in progress)
+ * 1 = init in progress (this hart is initializing)
+ * 2 = init complete
+ */
+volatile int boot_lock = 0;
+
+static int boot_try_acquire(void) {
+    int prev;
+    __asm__ volatile(
+        "0: lr.w %0, (%1)\n"
+        "   bnez %0, 1f\n"
+        "   sc.w %0, %2, (%1)\n"
+        "   bnez %0, 0b\n"
+        "1:\n"
+        : "=&r"(prev)
+        : "r"(&boot_lock), "r"(1)
+        : "memory");
+    return prev == 0; /* true if we successfully set from 0 -> 1 */
+}
+
+uint32_t get_hartid(void) {
+    uint32_t hartid;
+    __asm__ volatile("mv %0, tp" : "=r"(hartid));
+    return hartid;
+}
+
+// HSM (Hart State Management) SBI extension
+// Extension ID = 0x48534D (HSM) - note: NOT 0x48534D00
+// Function ID 0 = hart_start (a6 = 0)
+struct sbiret sbi_hart_start(uint32_t hartid, uint64_t start_addr, uint64_t opaque) {
+    return sbi_call((long)hartid, (long)start_addr, (long)opaque, 0, 0, 0, 0, 0x48534D);
+}
+
+void hart_secondary_main(void) {
+    uint32_t hartid = get_hartid();
+    /* Secondary harts should only run after primary completes initialization. */
+    /* Wait until boot_lock == 2 (init complete) */
+    while (boot_lock != 2) {
+        __asm__ __volatile__("wfi");
+    }
+
+    printf("| HART %d successfully booted!\n", hartid);
+    
+    // Secondary harts just spin
+    for (;;) {
+        __asm__ __volatile__("wfi");
+    }
+}
+
+void start_secondary_harts(void) {
+    // Try to start harts 1 through MAX_HARTS-1
+    for (uint32_t i = 0; i < MAX_HARTS; i++) {
+        extern void secondary_boot(void);
+        struct sbiret ret = sbi_hart_start(i, (uint64_t)secondary_boot, 0);
+        if (ret.error == 0) {
+            printf("| Started HART %d\n", i);
+            hart_boot_count += 1;
+        } else {
+            if ((uint32_t)ret.error == 0xfffffffa) {
+                printf("| Cannot boot HART %d: HART %d is already running\n", i, i);
+            } else if ((uint32_t)ret.error == 0xfffffffd) {
+                printf("| Cannot boot HART %d: No HART %d exists on the machine\n", i, i);
+            } else {
+                printf("| An error occurred in starting HART %d: ret.error = %x\n", i, ret.error);
+            }
+        }
+    }
+}
 
 __attribute__((naked))
 __attribute__((aligned(4)))
@@ -98,31 +171,44 @@ void handle_trap(struct trap_frame *f) {
 }
 
 void kernel_main(void) {
-    memset(__bss, 0, (size_t) __bss_end - (size_t) __bss); // Set globals (bss section) to 0
-    printf("\n\n| It's alive!\n");
+    uint32_t hartid = get_hartid();
+    printf("| HART ID = %d\n", hartid);
 
-    WRITE_CSR(stvec, (uint32_t) kernel_entry); // Register the trap handler
-    printf("| Exceptions can now be handled!\n");
+    // TODO: This spinlock shouldn't be necessary, possibly delete later
+    if (boot_try_acquire()) {
+        /* This hart will perform primary initialization */
+        memset(__bss, 0, (size_t) __bss_end - (size_t) __bss); // Set globals (bss section) to 0
+        printf("\n\n| It's alive!\n");
 
-    heap::init((paddr_t)(__free_ram), (size_t)HEAP_SIZE); // Initialize the heap
-    printf("| Initialized the heap\n");
-    pallocator::init((paddr_t)(__free_ram + HEAP_SIZE), (size_t)(__free_ram_end - __free_ram - HEAP_SIZE)); // Initialize the physical memory allocator
-    printf("| Initialized the physical memory allocator\n");
+        WRITE_CSR(stvec, (uint32_t) kernel_entry); // Register the trap handler
+        printf("| Exceptions can now be handled!\n");
 
-    __asm__ __volatile__("unimp"); // Triggers an exception
+        heap::init((paddr_t)(__free_ram), (size_t)HEAP_SIZE); // Initialize the heap
+        printf("| Initialized the heap\n");
+        pallocator::init((paddr_t)(__free_ram + HEAP_SIZE), (size_t)(__free_ram_end - __free_ram - HEAP_SIZE)); // Initialize the physical memory allocator
+        printf("| Initialized the physical memory allocator\n");
+
+        /* Start secondary harts */
+        printf("| Starting secondary harts...\n");
+        start_secondary_harts();
+
+        /* Mark initialization complete */
+        boot_lock = 2;
+        printf("| Initializing HART %d begin main\n", hartid);
+        //hart_secondary_main();
+    } else {
+        /* Not the initializing hart: wait until initialization completes */
+        while (boot_lock != 2) {
+            __asm__ __volatile__("wfi");
+        }
+        /* Now enter secondary main */
+        printf("| HART %d begin main\n", hartid);
+        hart_secondary_main();
+    }
+
+    //__asm__ __volatile__("unimp"); // Triggers an exception
 
     for (;;) {
         __asm__ __volatile__("wfi");
     }
-}
-
-__attribute__((section(".text.boot")))
-__attribute__((naked))
-void boot(void) {
-    __asm__ __volatile__(
-        "mv sp, %[stack_top]\n" // Set the stack pointer
-        "j kernel_main\n"       // Jump to the kernel main function
-        :
-        : [stack_top] "r" (__stack_top) // Pass the stack top address as %[stack_top]
-    );
 }
