@@ -48,24 +48,26 @@ struct sbiret sbi_hart_start(uint32_t hartid, uint64_t start_addr, uint64_t opaq
     return sbi_call((long)hartid, (long)start_addr, (long)opaque, 0, 0, 0, 0, 0x48534D);
 }
 
-void hart_secondary_main(void) {
+void kernel_main(void) {
     uint32_t hartid = get_hartid();
     /* Secondary harts should only run after primary completes initialization. */
     /* Wait until boot_lock == 2 (init complete) */
+    //printf("| HART %d got into secondary main\n", hartid);
     while (boot_lock != 2) {
-        __asm__ __volatile__("wfi");
+        printf("boot lock = %d\n", boot_lock);
+        //__asm__ __volatile__("wfi");
     }
 
     printf("| HART %d successfully booted!\n", hartid);
     
     // Secondary harts just spin
     for (;;) {
-        __asm__ __volatile__("wfi");
+        //__asm__ __volatile__("wfi");
     }
 }
 
 void start_secondary_harts(void) {
-    // Try to start harts 1 through MAX_HARTS-1
+    // Try to start harts 1 through MAX_HARTS-1 (skip hart 0, which is already running)
     for (uint32_t i = 0; i < MAX_HARTS; i++) {
         extern void secondary_boot(void);
         struct sbiret ret = sbi_hart_start(i, (uint64_t)secondary_boot, 0);
@@ -170,7 +172,7 @@ void handle_trap(struct trap_frame *f) {
     PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
 }
 
-void kernel_main(void) {
+void kernel_init(void) {
     uint32_t hartid = get_hartid();
     printf("| HART ID = %d\n", hartid);
 
@@ -178,7 +180,7 @@ void kernel_main(void) {
     if (boot_try_acquire()) {
         /* This hart will perform primary initialization */
         memset(__bss, 0, (size_t) __bss_end - (size_t) __bss); // Set globals (bss section) to 0
-        printf("\n\n| It's alive!\n");
+        printf("| It's alive!\n");
 
         WRITE_CSR(stvec, (uint32_t) kernel_entry); // Register the trap handler
         printf("| Exceptions can now be handled!\n");
@@ -192,10 +194,12 @@ void kernel_main(void) {
         printf("| Starting secondary harts...\n");
         start_secondary_harts();
 
-        /* Mark initialization complete */
+        /* Mark initialization complete with memory barrier to ensure secondary harts see it */
+        __asm__ volatile("" : : : "memory");
         boot_lock = 2;
+        __asm__ volatile("" : : : "memory");
         printf("| Initializing HART %d begin main\n", hartid);
-        //hart_secondary_main();
+        kernel_main();
     } else {
         /* Not the initializing hart: wait until initialization completes */
         while (boot_lock != 2) {
@@ -203,7 +207,7 @@ void kernel_main(void) {
         }
         /* Now enter secondary main */
         printf("| HART %d begin main\n", hartid);
-        hart_secondary_main();
+        kernel_main();
     }
 
     //__asm__ __volatile__("unimp"); // Triggers an exception
