@@ -1,5 +1,5 @@
 #include "heap.h"
-#include "spinlock.h"
+#include "sync/spinlock.h"
 
 // ChatGPT wrote this
 

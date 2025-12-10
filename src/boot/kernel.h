@@ -1,9 +1,9 @@
 #pragma once
 
-#include "sbi.h"
-#include "common.h"
-#include "heap.h"
-#include "pallocator.h"
+#include "../common/sbi.h"
+#include "../common/common.h"
+#include "../heap.h"
+#include "../pallocator.h"
 
 struct trap_frame {
     uint32_t ra;

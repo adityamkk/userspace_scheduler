@@ -1,6 +1,6 @@
 #pragma once
-#include "common.h"
-#include "spinlock.h"
+#include "common/common.h"
+#include "sync/spinlock.h"
 
 namespace pallocator {
     static const uint32_t PAGE_SIZE = 4096;

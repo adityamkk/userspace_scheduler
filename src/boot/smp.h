@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common.h"
+#include "../common/common.h"
 
 namespace smp {
     const int MAX_HARTS = 16;

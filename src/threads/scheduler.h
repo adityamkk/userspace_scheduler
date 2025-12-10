@@ -1,7 +1,7 @@
 #pragma once
 
 #include "threads.h"
-#include "sync_queue.h"
+#include "../sync/sync_queue.h"
 
 namespace scheduler {
     extern void schedule(threads::TCB* tcb);

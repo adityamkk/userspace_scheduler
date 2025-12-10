@@ -14,32 +14,49 @@ ODIR=build
 
 mkdir -p "$ODIR"
 
-echo "Building all .c files under $CDIR..."
-for SRC in $CDIR/*.c; do
-    [[ -f "$SRC" ]] || continue
-    OBJ="$ODIR/$(basename "$SRC" .c).o"
-    echo "  → $SRC → $OBJ"
-    $CC $CFLAGS -c "$SRC" -o "$OBJ"
-done
+# Helper to compile files found recursively under $CDIR and mirror the
+# directory structure under $ODIR to avoid name collisions.
+compile_c_files() {
+    echo "Building all .c files under $CDIR (recursive)..."
+    find "$CDIR" -type f -name '*.c' -print0 | while IFS= read -r -d '' SRC; do
+        REL=${SRC#${CDIR}/}
+        OBJ="$ODIR/${REL%.c}.o"
+        mkdir -p "$(dirname "$OBJ")"
+        echo "  → $SRC → $OBJ"
+        $CC $CFLAGS -c "$SRC" -o "$OBJ"
+    done
+}
 
-echo "Building all .cc files under $CDIR..."
-for SRC in $CDIR/*.cc; do
-    [[ -f "$SRC" ]] || continue
-    OBJ="$ODIR/$(basename "$SRC" .cc).o"
-    echo "  → $SRC → $OBJ"
-    $CPP $CCFLAGS -c "$SRC" -o "$OBJ"
-done
+compile_cc_files() {
+    echo "Building all .cc files under $CDIR (recursive)..."
+    find "$CDIR" -type f -name '*.cc' -print0 | while IFS= read -r -d '' SRC; do
+        REL=${SRC#${CDIR}/}
+        OBJ="$ODIR/${REL%.cc}.o"
+        mkdir -p "$(dirname "$OBJ")"
+        echo "  → $SRC → $OBJ"
+        $CPP $CCFLAGS -c "$SRC" -o "$OBJ"
+    done
+}
 
-echo "Building all assembly (.S/.s) files under $CDIR..."
-for SRC in $CDIR/*.S $CDIR/*.s; do
-    [[ -f "$SRC" ]] || continue
-    OBJ="$ODIR/$(basename "$SRC").o"
-    echo "  → $SRC → $OBJ"
-    $CC $CFLAGS -c "$SRC" -o "$OBJ"
-done
+compile_asm_files() {
+    echo "Building all assembly (.S/.s) files under $CDIR (recursive)..."
+    find "$CDIR" -type f \( -name '*.S' -o -name '*.s' \) -print0 | while IFS= read -r -d '' SRC; do
+        REL=${SRC#${CDIR}/}
+        OBJ="$ODIR/${REL%.*}.o"
+        mkdir -p "$(dirname "$OBJ")"
+        echo "  → $SRC → $OBJ"
+        $CC $CFLAGS -c "$SRC" -o "$OBJ"
+    done
+}
+
+compile_c_files
+compile_cc_files
+compile_asm_files
 
 echo "Linking all .o files under $ODIR..."
-$CPP $CCFLAGS -Wl,-T$CDIR/kernel.ld -Wl,-Map=$ODIR/kernel.map $ODIR/*.o -o $ODIR/kernel.elf
+# Find all .o files under $ODIR and pass them to the linker.
+OBJ_FILES=$(find "$ODIR" -type f -name '*.o' -print)
+$CPP $CCFLAGS -Wl,-T$CDIR/kernel.ld -Wl,-Map=$ODIR/kernel.map $OBJ_FILES -o $ODIR/kernel.elf
 
 # Run QEMU
 $QEMU -machine virt -bios default -nographic -serial mon:stdio --no-reboot -smp $QEMU_SMP -kernel $ODIR/kernel.elf

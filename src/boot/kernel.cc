@@ -1,9 +1,9 @@
 #include "kernel.h"
-#include "sbi.h"
-#include "common.h"
+#include "../common/sbi.h"
+#include "../common/common.h"
 #include "smp.h"
-#include "threads.h"
-#include "kernel_main.h"
+#include "../threads/threads.h"
+#include "../kernel_main.h"
 
 typedef unsigned char uint8_t;
 typedef unsigned int uint32_t;

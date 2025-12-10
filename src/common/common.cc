@@ -1,5 +1,5 @@
 #include "common.h"
-#include "spinlock.h"
+#include "../sync/spinlock.h"
 
 void putchar(char ch);
 

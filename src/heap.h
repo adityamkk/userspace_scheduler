@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common.h"
+#include "common/common.h"
 
 namespace heap {
     extern void init(paddr_t start, size_t size);

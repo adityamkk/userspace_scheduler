@@ -1,8 +1,8 @@
 #pragma once
 
-#include "common.h"
-#include "heap.h"
-#include "smp.h"
+#include "../common/common.h"
+#include "../heap.h"
+#include "../boot/smp.h"
 
 namespace threads {
 

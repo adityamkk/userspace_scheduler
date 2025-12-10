@@ -1,5 +1,5 @@
 #include "kernel_main.h"
-#include "threads.h"
+#include "threads/threads.h"
 
 void kernel_main() {
     printf("Hello, World!\n");
