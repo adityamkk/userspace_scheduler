@@ -44,18 +44,41 @@ struct sbiret sbi_hart_start(uint32_t hartid, uint64_t start_addr, uint64_t opaq
     return sbi_call((long)hartid, (long)start_addr, (long)opaque, 0, 0, 0, 0, 0x48534D);
 }
 
+struct sbiret sbi_ipi(uint32_t hartid) {
+    uint32_t mask = 1 << hartid;
+    return sbi_call((long)&mask, 0, 0, 0, 0, 0, 0, 0x04); // legacy: eid = 0x735049
+}
+
 void kernel_main(void) {
     uint32_t hartid = smp::me();
     /* Secondary harts should only run after primary completes initialization. */
+
+    /* PER-CORE INIT */
+    // Enable software interrupts
+    uint32_t sie = READ_CSR(sie);
+    sie |= (1 << 1);
+    WRITE_CSR(sie, sie);
+    uint32_t sstatus = READ_CSR(sstatus);
+    sstatus |= (1 << 1);
+    WRITE_CSR(sstatus, sstatus);
+
     /* Wait until boot_lock == 2 (init complete) */
-    //printf("| HART %d got into secondary main\n", hartid);
     while (boot_lock != 2) {
-        // TODO: Fix tight while loop by using an IPI
+        // This is a tight while loop, but its okay since this is temporarily for initialization
         // printf("boot lock = %d\n", boot_lock);
         __asm__ __volatile__("" ::: "memory");
     }
 
     printf("| HART %d successfully booted!\n", hartid);
+
+    /*
+    for (uint32_t id = 0; id < smp::MAX_HARTS; id++) {
+        if (id != hartid) {
+            printf("Sending IPI to hart %d\n", id);
+            sbi_ipi(id); // Wake up sleeping harts
+        }
+    }
+    */
 
     if (hartid == 0) {
         printf("| HART 0 doing some work\n");
@@ -66,10 +89,6 @@ void kernel_main(void) {
     }
     
     threads::stop();
-    // Secondary harts just spin
-    for (;;) {
-        //__asm__ __volatile__("wfi");
-    }
 }
 
 void start_secondary_harts(void) {
@@ -174,6 +193,16 @@ void handle_trap(struct trap_frame *f) {
     uint32_t scause = READ_CSR(scause);
     uint32_t stval = READ_CSR(stval);
     uint32_t user_pc = READ_CSR(sepc);
+
+    if (scause & 0x80000000) {
+        // Async interrupt
+        uint32_t code = scause & 0xFF;
+        if (code == 1) {
+            // Supervisor Software Interrupt (IPI)
+            // Used for waking up cores
+            return;
+        }
+    }
 
     PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
 }
