@@ -1,6 +1,9 @@
 #include "kernel.h"
 #include "sbi.h"
 #include "common.h"
+#include "smp.h"
+#include "threads.h"
+#include "scheduler.h"
 
 typedef unsigned char uint8_t;
 typedef unsigned int uint32_t;
@@ -10,7 +13,6 @@ extern char __bss[], __bss_end[], __stack_top[];
 extern char __free_ram[], __free_ram_end[];
 
 const uint32_t HEAP_SIZE = 2 * 1024 * 1024;
-const int MAX_HARTS = 16;
 
 volatile uint32_t hart_boot_count = 0;
 
@@ -35,12 +37,6 @@ static int boot_try_acquire(void) {
     return prev == 0; /* true if we successfully set from 0 -> 1 */
 }
 
-uint32_t get_hartid(void) {
-    uint32_t hartid;
-    __asm__ volatile("mv %0, tp" : "=r"(hartid));
-    return hartid;
-}
-
 // HSM (Hart State Management) SBI extension
 // Extension ID = 0x48534D (HSM) - note: NOT 0x48534D00
 // Function ID 0 = hart_start (a6 = 0)
@@ -49,17 +45,27 @@ struct sbiret sbi_hart_start(uint32_t hartid, uint64_t start_addr, uint64_t opaq
 }
 
 void kernel_main(void) {
-    uint32_t hartid = get_hartid();
+    uint32_t hartid = smp::me();
     /* Secondary harts should only run after primary completes initialization. */
     /* Wait until boot_lock == 2 (init complete) */
     //printf("| HART %d got into secondary main\n", hartid);
     while (boot_lock != 2) {
-        printf("boot lock = %d\n", boot_lock);
-        //__asm__ __volatile__("wfi");
+        // TODO: Fix tight while loop by using an IPI
+        // printf("boot lock = %d\n", boot_lock);
+        __asm__ __volatile__("" ::: "memory");
     }
 
     printf("| HART %d successfully booted!\n", hartid);
+
+    if (hartid == 0) {
+        printf("| HART 0 doing some work\n");
+        threads::kthread([] {
+            printf("Thread 0 is running!\n");
+        });
+        printf("| HART 0 finished some work, now stopping\n");
+    }
     
+    threads::stop();
     // Secondary harts just spin
     for (;;) {
         //__asm__ __volatile__("wfi");
@@ -68,7 +74,7 @@ void kernel_main(void) {
 
 void start_secondary_harts(void) {
     // Try to start harts 1 through MAX_HARTS-1 (skip hart 0, which is already running)
-    for (uint32_t i = 0; i < MAX_HARTS; i++) {
+    for (uint32_t i = 0; i < smp::MAX_HARTS; i++) {
         extern void secondary_boot(void);
         struct sbiret ret = sbi_hart_start(i, (uint64_t)secondary_boot, 0);
         if (ret.error == 0) {
@@ -173,7 +179,7 @@ void handle_trap(struct trap_frame *f) {
 }
 
 void kernel_init(void) {
-    uint32_t hartid = get_hartid();
+    uint32_t hartid = smp::me();
     printf("| HART ID = %d\n", hartid);
 
     // TODO: This spinlock shouldn't be necessary, possibly delete later
@@ -193,6 +199,9 @@ void kernel_init(void) {
         /* Start secondary harts */
         printf("| Starting secondary harts...\n");
         start_secondary_harts();
+
+        /* INIT */
+        threads::init(); // Sets up idle threads, etc.
 
         /* Mark initialization complete with memory barrier to ensure secondary harts see it */
         __asm__ volatile("" : : : "memory");

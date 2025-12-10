@@ -7,6 +7,7 @@ typedef unsigned long long uint64_t;
 typedef unsigned int size_t;
 typedef uint32_t paddr_t;
 typedef uint32_t vaddr_t;
+typedef uint32_t uintptr_t;
 
 #define NULL ((void *)0)
 #define align_up(value, align)   __builtin_align_up(value, align)
@@ -26,7 +27,7 @@ typedef uint32_t vaddr_t;
 
 #define ASSERT(condition)                                                      \
     do {                                                                       \
-        if (!condition) {                                                      \
+        if (!(condition)) {                                                      \
             printf("ASSERT failed at %s:%d\n", __FILE__, __LINE__);            \
             while (1) {}                                                       \
         }                                                                      \

@@ -1,0 +1,119 @@
+#include "threads.h"
+#include "scheduler.h"
+
+namespace threads {
+    // We need the attribute because we need the args to be in specific registers
+    __attribute__((naked)) void context_switch(uint32_t *prev_sp, uint32_t *next_sp) {
+        __asm__ __volatile__(
+            // Save callee-saved registers onto the current process's stack
+            "addi sp, sp, -13 * 4\n" // Allocate stack space for 13 4-byte registers
+            "sw ra,  0  * 4(sp)\n"   // Save callee-saved registers only
+            "sw s0,  1  * 4(sp)\n"
+            "sw s1,  2  * 4(sp)\n"
+            "sw s2,  3  * 4(sp)\n"
+            "sw s3,  4  * 4(sp)\n"
+            "sw s4,  5  * 4(sp)\n"
+            "sw s5,  6  * 4(sp)\n"
+            "sw s6,  7  * 4(sp)\n"
+            "sw s7,  8  * 4(sp)\n"
+            "sw s8,  9  * 4(sp)\n"
+            "sw s9,  10 * 4(sp)\n"
+            "sw s10, 11 * 4(sp)\n"
+            "sw s11, 12 * 4(sp)\n"
+
+            // Switch the stack pointer
+            "sw sp, (a0)\n"         // *prev_sp = sp;
+            "lw sp, (a1)\n"         // sp = *next_sp;
+
+            // Restore callee-saved registers from the next process's stack.
+            "lw ra,  0  * 4(sp)\n"
+            "lw s0,  1  * 4(sp)\n"
+            "lw s1,  2  * 4(sp)\n"
+            "lw s2,  3  * 4(sp)\n"
+            "lw s3,  4  * 4(sp)\n"
+            "lw s4,  5  * 4(sp)\n"
+            "lw s5,  6  * 4(sp)\n"
+            "lw s6,  7  * 4(sp)\n"
+            "lw s7,  8  * 4(sp)\n"
+            "lw s8,  9  * 4(sp)\n"
+            "lw s9,  10 * 4(sp)\n"
+            "lw s10, 11 * 4(sp)\n"
+            "lw s11, 12 * 4(sp)\n"
+            "addi sp, sp, 13 * 4\n"  // We've popped 13 4-byte registers from the stack
+            "ret\n"
+        );
+    }
+
+    smp::PerCPU<HARTState<void(*)()>> hartstates;
+
+    void init() {
+        for (uint32_t id = 0; id < smp::MAX_HARTS; id++) {
+            hartstates.forCPU(id).current_thread = new TCBNoWork();
+            hartstates.forCPU(id).idle_thread = new TCBWithIdle([] {
+                // Idle thread logic
+                // Handle request from blocking thread
+                hartstates.mine().req(); // Run the blocking thread's request
+                hartstates.mine().req = nullptr; // Destroy the reference to the request
+                if (hartstates.mine().reap_thread != nullptr) {
+                    delete hartstates.mine().reap_thread;
+                    hartstates.mine().reap_thread = nullptr;
+                }
+                // Look for the next kthread to run
+                TCB* me = hartstates.mine().current_thread;
+                TCB* next;
+                while (true) {
+                    next = scheduler::next();
+                    if (next != nullptr) {
+                        block(me, next, [] {});
+                    }
+                }
+            });
+            hartstates.forCPU(id).idle_thread->setPreemption(false); // Idle threads should never be preempted
+            hartstates.forCPU(id).reap_thread = nullptr;
+            hartstates.forCPU(id).req = nullptr;
+        }
+    }
+
+    // Helper function for scheduling
+    void kthread_schedule(TCB* kthread) {
+        ASSERT(kthread != nullptr);
+        scheduler::schedule(kthread);
+    }
+
+    void thread_entry() {
+        // Get current thread
+        TCB* my_thread = hartstates.mine().current_thread;
+        ASSERT(my_thread != nullptr);
+        my_thread->setPreemption(my_thread != hartstates.mine().idle_thread);
+        my_thread->run();
+        stop();
+        PANIC("Stop returned in thread_entry, a critical failure occurred.\n");
+    }
+
+    // Yields the currently running thread and switches to another thread
+    void yield() {
+        // TODO: Disable Interrupts Here
+        TCB* my_thread = hartstates.mine().current_thread;
+        my_thread->setPreemption(false); // If a preempt happens now, ignore it
+        // TODO: Restore Interrupts Here
+        block(my_thread, hartstates.mine().idle_thread, [] {
+            ASSERT(hartstates.mine().prev_thread != nullptr);
+            scheduler::schedule(hartstates.mine().prev_thread);
+        });
+        my_thread->setPreemption(true);
+    }
+
+    // Context switches to a new thread, deletes the old thread
+    void stop() {
+        // TODO: Disable Interrupts Here
+        TCB* my_thread = hartstates.mine().current_thread;
+        ASSERT(my_thread != nullptr);
+        my_thread->setPreemption(false); // If an interrupt happens now, ignore it
+        // TODO: Restore Interrupts Here
+        block(my_thread, hartstates.mine().idle_thread, [] {
+            ASSERT(hartstates.mine().prev_thread != nullptr);
+            hartstates.mine().reap_thread = hartstates.mine().prev_thread; // Tell the idle thread to reap my_thread (put it in hartstate)
+        });
+        PANIC("Stop somehow returned\n");
+    }
+};

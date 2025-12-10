@@ -6,6 +6,6 @@ public:
     void lock();
     void unlock();
 
-private:
+//private:
     volatile int locked;
 };
