@@ -52,20 +52,22 @@ namespace threads {
             hartstates.forCPU(id).idle_thread = new TCBWithIdle([] {
                 // Idle thread logic
                 // Handle request from blocking thread
-                hartstates.mine().req(); // Run the blocking thread's request
-                hartstates.mine().req = nullptr; // Destroy the reference to the request
-                if (hartstates.mine().reap_thread != nullptr) {
-                    delete hartstates.mine().reap_thread;
-                    hartstates.mine().reap_thread = nullptr;
-                }
-                // Look for the next kthread to run
-                TCB* me = hartstates.mine().current_thread;
-                TCB* next;
                 while (true) {
-                    next = scheduler::next();
-                    if (next != nullptr) {
-                        block(me, next, [] {});
+                    ASSERT(hartstates.mine().req != nullptr);
+                    hartstates.mine().req(); // Run the blocking thread's request
+                    hartstates.mine().req = nullptr; // Destroy the reference to the request
+                    if (hartstates.mine().reap_thread != nullptr) {
+                        delete hartstates.mine().reap_thread;
+                        hartstates.mine().reap_thread = nullptr;
                     }
+                    // Look for the next kthread to run
+                    TCB* me = hartstates.mine().current_thread;
+                    ASSERT(me == hartstates.mine().idle_thread);
+                    TCB* next = nullptr;
+                    while (next == nullptr) {
+                        next = scheduler::next();
+                    }
+                    block(me, next, [] {});
                 }
             });
             hartstates.forCPU(id).idle_thread->setPreemption(false); // Idle threads should never be preempted
@@ -94,6 +96,7 @@ namespace threads {
     void yield() {
         // TODO: Disable Interrupts Here
         TCB* my_thread = hartstates.mine().current_thread;
+        ASSERT(my_thread != nullptr);
         my_thread->setPreemption(false); // If a preempt happens now, ignore it
         // TODO: Restore Interrupts Here
         block(my_thread, hartstates.mine().idle_thread, [] {

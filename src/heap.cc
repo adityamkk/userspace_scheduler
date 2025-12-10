@@ -114,7 +114,10 @@ void free(void* ptr) {
 
     // coalesce adjacent free blocks
     BlockHeader* current = free_list;
-    while (current) {
+    int iterations = 0;
+    int max_iterations = 10000; // prevent infinite loops from circular references
+    while (current && iterations < max_iterations) {
+        iterations++;
         BlockHeader* next = current->next;
         if (next && current->free && next->free) {
             char* curr_end = (char*)(current + 1) + current->size;
@@ -122,9 +125,11 @@ void free(void* ptr) {
                 // merge adjacent blocks
                 current->size += sizeof(BlockHeader) + next->size;
                 current->next = next->next;
+                // Don't advance current; check if the merged block can merge with the next one
                 continue;
             }
         }
+        // Only advance current if no merge happened
         current = current->next;
     }
     heapLock.unlock();

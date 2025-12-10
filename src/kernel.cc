@@ -3,7 +3,7 @@
 #include "common.h"
 #include "smp.h"
 #include "threads.h"
-#include "scheduler.h"
+#include "kernel_main.h"
 
 typedef unsigned char uint8_t;
 typedef unsigned int uint32_t;
@@ -49,7 +49,7 @@ struct sbiret sbi_ipi(uint32_t hartid) {
     return sbi_call((long)&mask, 0, 0, 0, 0, 0, 0, 0x04); // legacy: eid = 0x735049
 }
 
-void kernel_main(void) {
+void kernel_init_2(void) {
     uint32_t hartid = smp::me();
     /* Secondary harts should only run after primary completes initialization. */
 
@@ -83,12 +83,16 @@ void kernel_main(void) {
     if (hartid == 0) {
         printf("| HART 0 doing some work\n");
         threads::kthread([] {
-            printf("Thread 0 is running!\n");
+            kernel_main();
         });
         printf("| HART 0 finished some work, now stopping\n");
+        threads::stop();
     }
     
-    threads::stop();
+    //threads::stop();
+    for (;;) {
+        __asm__ __volatile__ ("wfi");
+    }
 }
 
 void start_secondary_harts(void) {
@@ -237,7 +241,7 @@ void kernel_init(void) {
         boot_lock = 2;
         __asm__ volatile("" : : : "memory");
         printf("| Initializing HART %d begin main\n", hartid);
-        kernel_main();
+        kernel_init_2();
     } else {
         /* Not the initializing hart: wait until initialization completes */
         while (boot_lock != 2) {
@@ -245,7 +249,7 @@ void kernel_init(void) {
         }
         /* Now enter secondary main */
         printf("| HART %d begin main\n", hartid);
-        kernel_main();
+        kernel_init_2();
     }
 
     //__asm__ __volatile__("unimp"); // Triggers an exception

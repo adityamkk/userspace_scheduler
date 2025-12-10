@@ -47,8 +47,8 @@ namespace threads {
         if (next == hartstates.mine().idle_thread) {
             ASSERT(!next->preemptable);
         } else {
-            ASSERT(next->preemptable);
-            next->setPreemption(false); // Set the next thread's preemption to false
+            ASSERT(!next->preemptable);
+            //next->setPreemption(false); // Set the next thread's preemption to false
         }
         hartstates.mine().req = req; // Set the request, tells the idle thread what to do
         hartstates.mine().current_thread = next; // IMPORTANT: Assumes req will put the old TCB where it needs to go
@@ -76,7 +76,7 @@ namespace threads {
 
     public:
         TCBWithWork(Work work): work(work), stack_mem(nullptr) {
-            preemptable = true;
+            preemptable = false;
             // Allocate a stack from the heap
             stack_mem = heap::malloc(THREAD_STACK_SIZE);
             if (!stack_mem) PANIC("Kernel heap out of memory: Could not allocate new thread stack\n");
@@ -108,6 +108,7 @@ namespace threads {
         }
 
         void run() override {
+            this->preemptable = true;
             this->work();
         }
     };
@@ -119,7 +120,7 @@ namespace threads {
 
     public:
         TCBWithIdle(Work work): work(work), stack_mem(nullptr) {
-            preemptable = true;
+            preemptable = false;
             // Allocate a stack from the heap
             stack_mem = heap::malloc(IDLE_STACK_SIZE);
             if (!stack_mem) PANIC("Kernel heap out of memory: Could not allocate new thread stack\n");

@@ -15,6 +15,6 @@ secondary_boot:
     mul   t2, t2, t0         /* t2 = hartid * STACK_SIZE */
     sub   sp, t1, t2         /* sp = stacks_top - hartid*STACK_SIZE */
     
-    j kernel_main
+    j kernel_init_2
 
 .size secondary_boot, .-secondary_boot

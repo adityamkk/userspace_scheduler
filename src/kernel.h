@@ -56,6 +56,6 @@ extern "C" void kernel_entry(void);
 extern "C" void handle_trap(struct trap_frame *f);
 extern "C" void boot(void);
 extern "C" void kernel_init(void);
-extern "C" void kernel_main(void);
+extern "C" void kernel_init_2(void);
 extern "C" uint32_t get_hartid(void);
 extern "C" void secondary_boot(void);
