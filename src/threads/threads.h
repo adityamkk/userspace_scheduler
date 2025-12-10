@@ -4,6 +4,9 @@
 #include "../heap.h"
 #include "../boot/smp.h"
 
+// Forward declaration to avoid circular include (semaphore.h includes this header)
+class Semaphore;
+
 namespace threads {
 
     constexpr size_t THREAD_STACK_SIZE = 8 * 1024;
@@ -33,6 +36,7 @@ namespace threads {
         TCB* idle_thread; // The idle thread associated with a HART
         BlockRequest req; // Request lambda to the idle thread to do work on the current thread's behalf
         TCB* prev_thread; // Normally nullptr, block will set this to the old thread
+        Semaphore* prev_sem; // Normally nullptr, block will set this to an applicable semaphore to manipulate
         TCB* reap_thread; // Normally nullptr, a BlockRequest will set this whenever it wants a thread to be reaped in the idle thread
     };
 
