@@ -10,7 +10,6 @@ public:
     SpinlockNoInterrupts lock;
     SyncQueue<threads::TCB> blocked_threads;
     Semaphore(int n);
-    ~Semaphore();
     void down();
     void up();
 };
