@@ -12,4 +12,5 @@ namespace pit {
 
     extern bool disable_interrupts();
     extern void restore_interrupts(bool was);
+    extern bool are_interrupts_disabled();
 };

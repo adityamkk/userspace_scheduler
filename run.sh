@@ -7,8 +7,8 @@ QEMU_SMP=4
 
 CC=$(which riscv64-unknown-elf-gcc)
 CPP=$(which riscv64-unknown-elf-g++)
-CFLAGS="-march=rv32imac_zicsr -mabi=ilp32 -std=c99 -nostdlib -nostdinc -g3 -O3 -Wall -Werror -fno-builtin"
-CCFLAGS="-march=rv32imac_zicsr -mabi=ilp32 -std=c++20 -nostdlib -nostdinc -g3 -O3 -Wall -Werror -fno-builtin -fno-exceptions -fno-rtti -ffreestanding"
+CFLAGS="-march=rv32imac_zicsr -mabi=ilp32 -std=c99 -nostdlib -nostdinc -g3 -O3 -Wall -Werror -fno-builtin -ffixed-tp"
+CCFLAGS="-march=rv32imac_zicsr -mabi=ilp32 -std=c++20 -nostdlib -nostdinc -g3 -O3 -Wall -Werror -fno-builtin -fno-exceptions -fno-rtti -ffreestanding -ffixed-tp"
 CDIR=src
 ODIR=build
 

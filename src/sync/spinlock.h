@@ -11,6 +11,7 @@ public:
 //private:
     //volatile int locked;
     Atomic<int> locked;
+    bool prev_interrupt_state;
 };
 
 // Does not disable interrupts while holding the lock

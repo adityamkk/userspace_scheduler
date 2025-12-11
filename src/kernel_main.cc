@@ -2,27 +2,38 @@
 #include "threads/threads.h"
 #include "sync/semaphore.h"
 #include "sync/barrier.h"
+#include "boot/smp.h"
+
+void busy_work(uint64_t iterations)
+{
+    volatile uint64_t x = 0;
+    for (uint64_t i = 0; i < iterations; i++) {
+        x += i;
+    }
+}
 
 void kernel_main() {
-    printf("Hello, World!\n");
-    Barrier* b = new Barrier(3);
-    threads::kthread([b] {
-        printf("Lion Messi 1\n");
-        b->sync();
-        printf("Lion Messi 2\n");
-        b->sync();
-        printf("Lion Messi 3\n");
+    printf("Hello world!\n");
+    threads::kthread([] {
+        printf("Thread 1 Start\n");
+        busy_work(500000000ULL);
+        printf("Thread 1 End\n");
     });
-    threads::kthread([b] {
-        printf("Rhino Ronaldo 1\n");
-        b->sync();
-        printf("Rhino Ronaldo 2\n");
-        b->sync();
-        printf("Rhino Ronaldo 3\n");
+    threads::kthread([] {
+        printf("Thread 2 Start\n");
+        busy_work(500000000ULL);
+        printf("Thread 2 End\n");
     });
-    printf("Hello\n");
-    b->sync();
-    printf("Hello, Again!\n");
-    b->sync();
-    printf("Hello, Again, Again\n");
+    threads::kthread([] {
+        printf("Thread 3 Start\n");
+        busy_work(500000000ULL);
+        printf("Thread 3 End\n");
+    });
+    threads::kthread([] {
+        printf("Thread 4 Start\n");
+        busy_work(50000000ULL);
+        printf("Thread 4 End\n");
+    });
+    busy_work(500000000ULL);
+    printf("Goodbye!\n");
 }

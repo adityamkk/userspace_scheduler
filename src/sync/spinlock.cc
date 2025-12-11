@@ -1,7 +1,7 @@
 #include "spinlock.h"
 #include "../boot/pit.h"
 
-Spinlock::Spinlock() : locked(0) {}
+Spinlock::Spinlock() : locked(0), prev_interrupt_state(false) {}
 
 void Spinlock::lock() {
     bool was = pit::disable_interrupts();
@@ -10,10 +10,12 @@ void Spinlock::lock() {
         was = pit::disable_interrupts();
         // TODO: Do something
     }
+    prev_interrupt_state = was;
 }
 
 void Spinlock::unlock() {
     locked.set(0);
+    pit::restore_interrupts(prev_interrupt_state);
 }
 
 SpinlockNoInterrupts::SpinlockNoInterrupts() : locked(0) {}

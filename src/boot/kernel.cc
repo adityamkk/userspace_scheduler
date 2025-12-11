@@ -127,7 +127,7 @@ void kernel_entry(void) {
         "addi sp, sp, -4 * 31\n"
         "sw ra,  4 * 0(sp)\n"
         "sw gp,  4 * 1(sp)\n"
-        "sw tp,  4 * 2(sp)\n"
+        //"sw tp,  4 * 2(sp)\n"
         "sw t0,  4 * 3(sp)\n"
         "sw t1,  4 * 4(sp)\n"
         "sw t2,  4 * 5(sp)\n"
@@ -164,7 +164,7 @@ void kernel_entry(void) {
 
         "lw ra,  4 * 0(sp)\n"
         "lw gp,  4 * 1(sp)\n"
-        "lw tp,  4 * 2(sp)\n"
+        //"lw tp,  4 * 2(sp)\n"
         "lw t0,  4 * 3(sp)\n"
         "lw t1,  4 * 4(sp)\n"
         "lw t2,  4 * 5(sp)\n"
@@ -198,23 +198,25 @@ void kernel_entry(void) {
 }
 
 void handle_trap(struct trap_frame *f) {
+    int enter_smp = smp::me();
     uint32_t scause = READ_CSR(scause);
     uint32_t stval = READ_CSR(stval);
     uint32_t user_pc = READ_CSR(sepc);
+    ASSERT(pit::are_interrupts_disabled());
 
     if (scause & 0x80000000) {
         // Async interrupt
         uint32_t code = scause & 0xFF;
-        uint32_t cause = scause & 0x7FFFFFFF;
         if (code == 1) {
             // Supervisor Software Interrupt (IPI)
             // Used for waking up cores
             return;
-        }
-        if (cause == 5) {
+        } else if (code == 5) {
             // Timer Interrupt
             uint64_t now = pit::get_time();
             pit::set_timer(now + 1024 * 1024);
+            int exit_smp = smp::me();
+            ASSERT(enter_smp == exit_smp);
             pit::pit_handler();
             return;
         }
