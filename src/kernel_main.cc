@@ -14,26 +14,32 @@ void busy_work(uint64_t iterations)
 
 void kernel_main() {
     printf("Hello world!\n");
-    threads::kthread([] {
+    Barrier *b = new Barrier(5);
+    threads::kthread([b] {
         printf("Thread 1 Start\n");
         busy_work(500000000ULL);
+        b->sync();
         printf("Thread 1 End\n");
     });
-    threads::kthread([] {
+    threads::kthread([b] {
         printf("Thread 2 Start\n");
         busy_work(500000000ULL);
+        b->sync();
         printf("Thread 2 End\n");
     });
-    threads::kthread([] {
+    threads::kthread([b] {
         printf("Thread 3 Start\n");
         busy_work(500000000ULL);
         printf("Thread 3 End\n");
+        b->sync();
     });
-    threads::kthread([] {
+    threads::kthread([b] {
         printf("Thread 4 Start\n");
         busy_work(50000000ULL);
         printf("Thread 4 End\n");
+        b->sync();
     });
     busy_work(500000000ULL);
+    b->sync();
     printf("Goodbye!\n");
 }
