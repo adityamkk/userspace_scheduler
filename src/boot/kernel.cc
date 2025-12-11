@@ -4,6 +4,7 @@
 #include "smp.h"
 #include "../threads/threads.h"
 #include "../kernel_main.h"
+#include "pit.h"
 
 typedef unsigned char uint8_t;
 typedef unsigned int uint32_t;
@@ -54,6 +55,8 @@ void kernel_init_2(void) {
     /* Secondary harts should only run after primary completes initialization. */
 
     /* PER-CORE INIT */
+    WRITE_CSR(stvec, (uint32_t) kernel_entry); // Register the trap handler for all harts
+
     // Enable software interrupts
     uint32_t sie = READ_CSR(sie);
     sie |= (1 << 1);
@@ -61,6 +64,8 @@ void kernel_init_2(void) {
     uint32_t sstatus = READ_CSR(sstatus);
     sstatus |= (1 << 1);
     WRITE_CSR(sstatus, sstatus);
+
+    pit::init();
 
     /* Wait until boot_lock == 2 (init complete) */
     while (boot_lock != 2) {
@@ -86,10 +91,9 @@ void kernel_init_2(void) {
             kernel_main();
         });
         printf("| HART 0 finished some work, now stopping\n");
-        threads::stop();
     }
     
-    //threads::stop();
+    threads::stop();
     for (;;) {
         __asm__ __volatile__ ("wfi");
     }
@@ -201,9 +205,17 @@ void handle_trap(struct trap_frame *f) {
     if (scause & 0x80000000) {
         // Async interrupt
         uint32_t code = scause & 0xFF;
+        uint32_t cause = scause & 0x7FFFFFFF;
         if (code == 1) {
             // Supervisor Software Interrupt (IPI)
             // Used for waking up cores
+            return;
+        }
+        if (cause == 5) {
+            // Timer Interrupt
+            uint64_t now = pit::get_time();
+            pit::set_timer(now + 1024 * 1024);
+            pit::pit_handler();
             return;
         }
     }
