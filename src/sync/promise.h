@@ -6,7 +6,7 @@ template <typename T>
 class Promise {
     T value;
     Semaphore sem;
-
+public:
     Promise() : sem(0) {}
 
     /**
