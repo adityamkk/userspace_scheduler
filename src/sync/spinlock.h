@@ -1,5 +1,7 @@
 #pragma once
 
+#include "atomic.h"
+
 class Spinlock {
 public:
     Spinlock();
@@ -7,7 +9,8 @@ public:
     void unlock();
 
 //private:
-    volatile int locked;
+    //volatile int locked;
+    Atomic<int> locked;
 };
 
 // Does not disable interrupts while holding the lock
@@ -18,5 +21,6 @@ public:
     void unlock();
 
 //private:
-    volatile int locked;
+    //volatile int locked;
+    Atomic<int> locked;
 };

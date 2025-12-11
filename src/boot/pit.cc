@@ -45,7 +45,7 @@ namespace pit {
 
     bool disable_interrupts() {
         uint32_t sie = READ_CSR(sie);
-        bool prev = (sie & (1 << 5) == 0) ? false : true;
+        bool prev = ((sie & (1 << 5)) == 0) ? false : true;
         sie &= ~(1 << 5);       // Clear STIE
         WRITE_CSR(sie, sie);
         return prev;
