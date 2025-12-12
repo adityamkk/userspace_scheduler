@@ -54,8 +54,10 @@ compile_cc_files
 compile_asm_files
 
 echo "Linking all .o files under $ODIR..."
-# Find all .o files under $ODIR and pass them to the linker.
-OBJ_FILES=$(find "$ODIR" -type f -name '*.o' -print)
+# Link boot code first (for ENTRY point), then all other .o files
+BOOT_OBJ="$ODIR/boot/boot.o"
+OTHER_OBJ=$(find "$ODIR" -type f -name '*.o' -print | grep -v "boot.o")
+OBJ_FILES="$BOOT_OBJ $OTHER_OBJ"
 $CPP $CCFLAGS -Wl,-T$CDIR/kernel.ld -Wl,-Map=$ODIR/kernel.map $OBJ_FILES -o $ODIR/kernel.elf
 
 # Run QEMU

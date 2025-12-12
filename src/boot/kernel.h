@@ -8,7 +8,7 @@
 struct trap_frame {
     uint32_t ra;
     uint32_t gp;
-    uint32_t tp;
+    //uint32_t tp;
     uint32_t t0;
     uint32_t t1;
     uint32_t t2;
