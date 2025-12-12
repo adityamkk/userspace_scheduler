@@ -3,6 +3,7 @@
 #include "sync/semaphore.h"
 #include "sync/barrier.h"
 #include "sync/promise.h"
+#include "sync/shared.h"
 
 void busy_work(uint64_t iterations)
 {
@@ -12,43 +13,30 @@ void busy_work(uint64_t iterations)
     }
 }
 
+struct A {
+    int val;
+    A(int val) : val(val) {}
+
+    ~A() {
+        printf("Destructor: %d\n", val);
+    }
+};
+
 void kernel_main() {
-    printf("Hello world! tid = %d\n", threads::getktid());
-    Barrier *b = new Barrier(5);
-    Promise<int> *p = new Promise<int>();
-    threads::kthread([b, p] {
-        printf("Thread %d Start\n", threads::getktid());
-        busy_work(500000000ULL);
-        b->sync();
-        ASSERT(p->get() == 5);
-        printf("Thread %d End\n", threads::getktid());
-    });
-    threads::kthread([b, p] {
-        printf("Thread %d Start\n", threads::getktid());
-        busy_work(500000000ULL);
-        b->sync();
-        ASSERT(p->get() == 5);
-        printf("Thread %d End\n", threads::getktid());
-    });
-    threads::kthread([b, p] {
-        printf("Thread %d Start\n", threads::getktid());
-        busy_work(500000000ULL);
-        b->sync();
-        ASSERT(p->get() == 5);
-        printf("Thread %d End\n", threads::getktid());
-    });
-    threads::kthread([b, p] {
-        printf("Thread %d Start\n", threads::getktid());
-        busy_work(50000000ULL);
-        printf("Thread %d Mid\n", threads::getktid());
-        b->sync();
-        busy_work(50000000ULL);
-        printf("Must print first\n");
-        p->set(5);
-        printf("Thread %d End\n", threads::getktid());
-    });
-    busy_work(500000000ULL);
+    SharedPtr<A> shared = SharedPtr<A>(new A(5));
+    Barrier *b = new Barrier(6);
+    for (int i = 0; i < 5; i++) {
+        threads::kthread([shared, b] {
+            printf("Thread %d sees *shared = %x\n", threads::getktid(), shared->val);
+            b->sync();
+            b->sync();
+            printf("Thread %d sees *shared = %x\n", threads::getktid(), shared->val);
+        });
+    }
+    printf("Main sees *shared = %x\n", shared->val);
     b->sync();
-    ASSERT(p->get() == 5);
-    printf("Goodbye!\n");
+    shared->val = 6;
+    b->sync();
+    printf("Main sees *shared = %x\n", shared->val);
+    printf("Kernel main finished!\n");
 }
