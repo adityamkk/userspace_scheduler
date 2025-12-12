@@ -59,6 +59,7 @@ namespace threads {
     }
 
     smp::PerCPU<HARTState<void(*)()>> hartstates;
+    Atomic<uint32_t> tidCounter = Atomic<uint32_t>(0);
 
     void init() {
         for (uint32_t id = 0; id < smp::MAX_HARTS; id++) {
@@ -115,6 +116,14 @@ namespace threads {
         my_thread->run();
         stop();
         PANIC("Stop returned in thread_entry, a critical failure occurred.\n");
+    }
+
+    // Gets the id of the currently running kthread
+    uint32_t getktid() {
+        bool was = pit::disable_interrupts();
+        TCB* my_thread = hartstates.mine().current_thread;
+        pit::restore_interrupts(was);
+        return my_thread->tid;
     }
 
     // Yields the currently running thread and switches to another thread

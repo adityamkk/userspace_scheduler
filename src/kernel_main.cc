@@ -13,39 +13,39 @@ void busy_work(uint64_t iterations)
 }
 
 void kernel_main() {
-    printf("Hello world!\n");
+    printf("Hello world! tid = %d\n", threads::getktid());
     Barrier *b = new Barrier(5);
     Promise<int> *p = new Promise<int>();
     threads::kthread([b, p] {
-        printf("Thread 1 Start\n");
+        printf("Thread %d Start\n", threads::getktid());
         busy_work(500000000ULL);
         b->sync();
         ASSERT(p->get() == 5);
-        printf("Thread 1 End\n");
+        printf("Thread %d End\n", threads::getktid());
     });
     threads::kthread([b, p] {
-        printf("Thread 2 Start\n");
+        printf("Thread %d Start\n", threads::getktid());
         busy_work(500000000ULL);
         b->sync();
         ASSERT(p->get() == 5);
-        printf("Thread 2 End\n");
+        printf("Thread %d End\n", threads::getktid());
     });
     threads::kthread([b, p] {
-        printf("Thread 3 Start\n");
+        printf("Thread %d Start\n", threads::getktid());
         busy_work(500000000ULL);
         b->sync();
         ASSERT(p->get() == 5);
-        printf("Thread 3 End\n");
+        printf("Thread %d End\n", threads::getktid());
     });
     threads::kthread([b, p] {
-        printf("Thread 4 Start\n");
+        printf("Thread %d Start\n", threads::getktid());
         busy_work(50000000ULL);
-        printf("Thread 4 Mid\n");
+        printf("Thread %d Mid\n", threads::getktid());
         b->sync();
         busy_work(50000000ULL);
         printf("Must print first\n");
         p->set(5);
-        printf("Thread 4 End\n");
+        printf("Thread %d End\n", threads::getktid());
     });
     busy_work(500000000ULL);
     b->sync();

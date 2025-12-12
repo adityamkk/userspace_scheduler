@@ -4,6 +4,7 @@
 #include "../heap.h"
 #include "../boot/smp.h"
 #include "../boot/pit.h"
+#include "../sync/atomic.h"
 
 // Forward declaration to avoid circular include (semaphore.h includes this header)
 class Semaphore;
@@ -18,8 +19,10 @@ namespace threads {
     extern __attribute__((naked)) void context_switch(uint32_t *prev_sp, uint32_t *next_sp);
 
     // Base class for TCBs
+    extern Atomic<uint32_t> tidCounter;
     class TCB {
     public:
+        uint32_t tid; // Kernel thread id
         uint32_t sp; // current stack pointer value for this thread
         bool preemptable; // whether this TCB can be preempted or not
         bool setPreemption(bool preemption) {
@@ -63,6 +66,7 @@ namespace threads {
         context_switch(&(my_thread->sp), &(next->sp));
     }
 
+    extern uint32_t getktid();
     extern void yield();
     extern void stop();
 
@@ -82,6 +86,7 @@ namespace threads {
 
     public:
         TCBWithWork(Work work): work(work) {
+            tid = tidCounter.fetch_add(1);
             preemptable = false;
             // Allocate a stack from the heap
             stack_mem = heap::malloc(THREAD_STACK_SIZE);
@@ -131,6 +136,7 @@ namespace threads {
 
     public:
         TCBWithIdle(Work work): work(work) {
+            tid = tidCounter.fetch_add(1);
             preemptable = false;
             // Allocate a stack from the heap
             stack_mem = heap::malloc(IDLE_STACK_SIZE);

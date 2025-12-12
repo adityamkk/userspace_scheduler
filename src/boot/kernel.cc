@@ -86,11 +86,11 @@ void kernel_init_2(void) {
     */
 
     if (hartid == 0) {
-        printf("| HART 0 doing some work\n");
+        //printf("| HART 0 doing some work\n");
         threads::kthread([] {
             kernel_main();
         });
-        printf("| HART 0 finished some work, now stopping\n");
+        //printf("| HART 0 finished some work, now stopping\n");
     }
     
     threads::stop();
