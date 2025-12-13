@@ -5,6 +5,7 @@
 #include "../heap.h"
 #include "../pallocator.h"
 
+// Trap frame does not include tp because tp stores per-HART information
 struct trap_frame {
     uint32_t ra;
     uint32_t gp;

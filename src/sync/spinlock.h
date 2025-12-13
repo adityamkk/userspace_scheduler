@@ -9,7 +9,6 @@ public:
     void unlock();
 
 //private:
-    //volatile int locked;
     Atomic<int> locked;
     bool prev_interrupt_state;
 };
@@ -22,6 +21,5 @@ public:
     void unlock();
 
 //private:
-    //volatile int locked;
     Atomic<int> locked;
 };

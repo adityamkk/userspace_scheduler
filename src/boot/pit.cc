@@ -39,6 +39,10 @@ namespace pit {
         return ((uint64_t)hi << 32) | lo;
     }
 
+    /**
+     * The timer interrupt handler tries to preempt the currently running thread and context switch to another one
+     * This handler operates in O(1) to be efficient
+     */
     void pit_handler() {
         // If the currently running thread has preemption disabled or is an idle thread, don't preempt
         threads::TCB* my_thread = threads::hartstates.mine().current_thread;
