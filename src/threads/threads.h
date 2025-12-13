@@ -15,7 +15,6 @@ namespace threads {
     constexpr size_t IDLE_STACK_SIZE = 1 * 1024;
 
     extern void thread_entry();
-    extern void enable_interrupts();
     extern __attribute__((naked)) void context_switch(uint32_t *prev_sp, uint32_t *next_sp);
 
     // Base class for TCBs
@@ -92,23 +91,17 @@ namespace threads {
             stack_mem = heap::malloc(THREAD_STACK_SIZE);
             if (!stack_mem) PANIC("Kernel heap out of memory: Could not allocate new thread stack\n");
 
-            // Initialize stack so that context_switch can restore registers and
-            // return into the trampoline. context_switch now saves/restores
-            // an extra CSR (SIE), so the stack must contain (at sp):
-            // ra, s0..s11 (13 words) and SIE (1 word) = 14 words total.
+            // Initialize stack so that context_switch can restore registers and return to trampoline
             uint32_t *stack_top = (uint32_t *)((uintptr_t)stack_mem + THREAD_STACK_SIZE);
 
             // Ensure 4-byte alignment
             stack_top = (uint32_t *)((uintptr_t)stack_top & ~0x3);
 
-            // Reserve space for 14 words (13 callee-saved regs + SIE)
+            // Reserve space for registers
             stack_top -= 16;
 
-            // Layout expected by context_switch: [0]=ra, [1]=s0, [2]=s1 ... [12]=s11, [13]=saved_sie
-            // ra points to the thread entry which calls run
             stack_top[0] = (uint32_t)((uintptr_t)thread_entry);
 
-            // zero the callee-saved registers s0..s11
             for (int i = 1; i < 16; ++i) stack_top[i] = 0;
 
             stack_top[13] = (1 << 5) | (1 << 1); // sstatus
@@ -150,11 +143,9 @@ namespace threads {
             // Reserve space for 14 words (13 callee-saved regs + SIE)
             stack_top -= 16;
 
-            // Layout expected by context_switch: [0]=ra, [1]=s0, [2]=s1 ... [12]=s11, [13]=saved_sie
             // ra points to the thread entry which calls run
             stack_top[0] = (uint32_t)((uintptr_t)thread_entry);
 
-            // zero the callee-saved registers s0..s11
             for (int i = 1; i < 16; ++i) stack_top[i] = 0;
 
             stack_top[13] = (1 << 5) | (1 << 1); // sstatus

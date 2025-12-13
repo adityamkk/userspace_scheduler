@@ -61,6 +61,7 @@ namespace threads {
     smp::PerCPU<HARTState<void(*)()>> hartstates;
     Atomic<uint32_t> tidCounter = Atomic<uint32_t>(0);
 
+    // Initializes idle threads
     void init() {
         for (uint32_t id = 0; id < smp::MAX_HARTS; id++) {
             hartstates.forCPU(id).current_thread = new TCBNoWork();
@@ -108,6 +109,7 @@ namespace threads {
         scheduler::schedule(kthread);
     }
 
+    // Entry point into the thread
     void thread_entry() {
         // Get current thread
         TCB* my_thread = hartstates.mine().current_thread;
