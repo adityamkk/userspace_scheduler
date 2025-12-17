@@ -5,10 +5,10 @@ void putchar(char ch);
 
 Spinlock printLock{};
 
-void *memset(void *buf, char c, size_t n) {
+extern "C" void *memset(void *buf, int c, size_t n) {
     uint8_t *p = (uint8_t *) buf;
     while (n--)
-        *p++ = c;
+        *p++ = (uint8_t)c;
     return buf;
 }
 
@@ -92,6 +92,11 @@ void printf(const char *fmt, ...) {
                         unsigned nibble = (value >> (i * 4)) & 0xf;
                         putchar("0123456789abcdef"[nibble]);
                     }
+                }
+                case 'c': { // Print a single character.
+                    char s = (char)va_arg(vargs, int);
+                    putchar(s);
+                    break;
                 }
             }
         } else {

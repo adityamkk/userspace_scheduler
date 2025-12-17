@@ -147,11 +147,29 @@ void* operator new(size_t size) {
     return p;
 }
 
+void* operator new(size_t size, std::align_val_t align) {
+    // For simplicity, allocate extra space and align manually
+    size_t alignment = static_cast<size_t>(align);
+    void* p = heap::malloc(size + alignment);
+    if (p == 0) PANIC("out of memory");
+    uintptr_t addr = reinterpret_cast<uintptr_t>(p);
+    uintptr_t aligned_addr = (addr + alignment - 1) & ~(alignment - 1);
+    return reinterpret_cast<void*>(aligned_addr);
+}
+
 void operator delete(void* p) noexcept {
     return heap::free(p);
 }
 
 void operator delete(void* p, size_t sz) {
+    return heap::free(p);
+}
+
+void operator delete(void* p, std::align_val_t align) noexcept {
+    return heap::free(p);
+}
+
+void operator delete(void* p, size_t sz, std::align_val_t align) {
     return heap::free(p);
 }
 
@@ -161,10 +179,27 @@ void* operator new[](size_t size) {
     return p;
 }
 
+void* operator new[](size_t size, std::align_val_t align) {
+    size_t alignment = static_cast<size_t>(align);
+    void* p = heap::malloc(size + alignment);
+    if (p == 0) PANIC("out of memory");
+    uintptr_t addr = reinterpret_cast<uintptr_t>(p);
+    uintptr_t aligned_addr = (addr + alignment - 1) & ~(alignment - 1);
+    return reinterpret_cast<void*>(aligned_addr);
+}
+
 void operator delete[](void* p) noexcept {
     return heap::free(p);
 }
 
 void operator delete[](void* p, size_t sz) {
+    return heap::free(p);
+}
+
+void operator delete[](void* p, std::align_val_t align) noexcept {
+    return heap::free(p);
+}
+
+void operator delete[](void* p, size_t sz, std::align_val_t align) {
     return heap::free(p);
 }

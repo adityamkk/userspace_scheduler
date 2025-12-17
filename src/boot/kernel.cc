@@ -5,6 +5,7 @@
 #include "../threads/threads.h"
 #include "../kernel_main.h"
 #include "pit.h"
+#include "../drivers/virtio-blk/virtio-blk.h"
 
 typedef unsigned char uint8_t;
 typedef unsigned int uint32_t;
@@ -238,6 +239,9 @@ void kernel_init(void) {
     printf("| Initialized the heap\n");
     pallocator::init((paddr_t)(__free_ram + HEAP_SIZE), (size_t)(__free_ram_end - __free_ram - HEAP_SIZE)); // Initialize the physical memory allocator
     printf("| Initialized the physical memory allocator\n");
+
+    /* Global devices */
+    virtio_blk_init();
 
     /* Start secondary harts */
     printf("| Starting secondary harts...\n");

@@ -4,6 +4,7 @@
 #include "sync/barrier.h"
 #include "sync/promise.h"
 #include "sync/shared.h"
+#include "drivers/virtio-blk/virtio-blk.h"
 
 void busy_work(uint64_t iterations)
 {
@@ -23,6 +24,7 @@ struct A {
 };
 
 void kernel_main() {
+    /*
     SharedPtr<A> shared = SharedPtr<A>(new A(5));
     Barrier *b = new Barrier(6);
     for (int i = 0; i < 5; i++) {
@@ -39,4 +41,10 @@ void kernel_main() {
     b->sync();
     printf("Main sees *shared = %x\n", shared->val);
     printf("Kernel main finished!\n");
+    */
+    char *buf = new char[512];
+    read_write_disk(buf, 0, false);
+    for (int i = 0; i < 512; i++) {
+        printf("%c", buf[i]);
+    }
 }
