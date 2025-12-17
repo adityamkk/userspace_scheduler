@@ -20,7 +20,7 @@ public:
 template <typename K, typename V>
 class HashMap {
     uint32_t num_buckets;
-    SharedPtr<HashNode<K, V>> buckets[];
+    SharedPtr<HashNode<K, V>>* buckets;
     uint32_t hash(K key) {
         uint32_t rolling_hash = 0;
         for(int i = 0; i < sizeof(K); i++) {
