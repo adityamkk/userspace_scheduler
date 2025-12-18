@@ -10,7 +10,7 @@ public:
     T* value;
     Atomic<uint32_t> shared_count;
     Atomic<uint32_t> total_count;
-    ICB(T* ptr) : value(ptr), shared_count(0), total_count(0) {}
+    ICB(T* ptr) : value(ptr), shared_count(1), total_count(1) {}
 };
 
 template <typename T>

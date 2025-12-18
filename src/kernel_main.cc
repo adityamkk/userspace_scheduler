@@ -43,7 +43,8 @@ void kernel_main() {
     printf("Kernel main finished!\n");
     */
     char *buf = new char[512];
-    read_write_disk(buf, 0, false);
+    SharedPtr<Promise<bool>> sector_read_promise = read_write_disk(buf, 0, false);
+    ASSERT(sector_read_promise->get());
     for (int i = 0; i < 512; i++) {
         printf("%c", buf[i]);
     }

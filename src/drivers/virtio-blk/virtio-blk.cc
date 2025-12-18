@@ -63,12 +63,15 @@ void virtio_blk_init(void) {
 
 // Notifies the device that there is a new request. `desc_index` is the index
 // of the head descriptor of the new request.
+Spinlock kickLock;
 void virtq_kick(struct virtio_virtq *vq, int desc_index) {
+    kickLock.lock();
     vq->avail.ring[vq->avail.index % VIRTQ_ENTRY_NUM] = desc_index;
     vq->avail.index++;
     __sync_synchronize();
     virtio_reg_write32(VIRTIO_REG_QUEUE_NOTIFY, vq->queue_index);
     vq->last_used_index++;
+    kickLock.unlock();
 }
 
 // Returns whether there are requests being processed by the device.
@@ -77,22 +80,14 @@ bool virtq_is_busy(struct virtio_virtq *vq) {
 }
 
 // Reads/writes from/to virtio-blk device.
-void read_write_disk(void *buf, unsigned sector, int is_write) {
+SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_write) {
     if (sector >= blk_capacity / SECTOR_SIZE) {
         printf("virtio: tried to read/write sector=%d, but capacity is %d\n",
               sector, blk_capacity / SECTOR_SIZE);
-        return;
+        SharedPtr<Promise<bool>> failure_promise = SharedPtr<Promise<bool>>(new Promise<bool>());
+        failure_promise->set(false);
+        return failure_promise;
     }
-
-    // Dynamically allocate a block request
-    paddr_t blk_req_paddr = (paddr_t)(new virtio_blk_req());
-    struct virtio_blk_req * blk_req = (struct virtio_blk_req *) blk_req_paddr;
-
-    // Construct the request according to the virtio-blk specification.
-    blk_req->sector = sector;
-    blk_req->type = is_write ? VIRTIO_BLK_T_OUT : VIRTIO_BLK_T_IN;
-    if (is_write)
-        memcpy(blk_req->data, buf, SECTOR_SIZE);
 
     // Collect 3 descriptors from the pool of descriptors
     int* desc_id_ptr = descriptor_pool.allocate();
@@ -103,11 +98,23 @@ void read_write_disk(void *buf, unsigned sector, int is_write) {
         descriptor_pool.free(data_id_ptr);
         descriptor_pool.free(status_id_ptr);
         printf("virtio: warn: failed to allocate descriptors in virtq\n");
-        return;
+        SharedPtr<Promise<bool>> failure_promise = SharedPtr<Promise<bool>>(new Promise<bool>());
+        failure_promise->set(false);
+        return failure_promise;
     }
     int desc_id = *desc_id_ptr;
     int data_id = *data_id_ptr;
     int status_id = *status_id_ptr;
+
+    // Dynamically allocate a block request
+    paddr_t blk_req_paddr = (paddr_t)(new virtio_blk_req());
+    struct virtio_blk_req * blk_req = (struct virtio_blk_req *) blk_req_paddr;
+
+    // Construct the request according to the virtio-blk specification.
+    blk_req->sector = sector;
+    blk_req->type = is_write ? VIRTIO_BLK_T_OUT : VIRTIO_BLK_T_IN;
+    if (is_write)
+        memcpy(blk_req->data, buf, SECTOR_SIZE);
 
     // Construct the virtqueue descriptors (using 3 descriptors).
     struct virtio_virtq *vq = blk_request_vq;
@@ -137,7 +144,9 @@ void read_write_disk(void *buf, unsigned sector, int is_write) {
         printf("virtio: warn: failed to read/write sector=%d status=%d\n",
                sector, blk_req->status);
         delete blk_req;
-        return;
+        SharedPtr<Promise<bool>> failure_promise = SharedPtr<Promise<bool>>(new Promise<bool>());
+        failure_promise->set(false);
+        return failure_promise;
     }
 
     // For read operations, copy the data into the buffer.
@@ -145,4 +154,7 @@ void read_write_disk(void *buf, unsigned sector, int is_write) {
         memcpy(buf, blk_req->data, SECTOR_SIZE);
 
     delete blk_req;
+    SharedPtr<Promise<bool>> success_promise = SharedPtr<Promise<bool>>(new Promise<bool>());
+    success_promise->set(true);
+    return success_promise;
 }
