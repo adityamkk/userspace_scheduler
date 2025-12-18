@@ -23,8 +23,7 @@ struct A {
     }
 };
 
-void kernel_main() {
-    /*
+void shared_ptr_test() {
     SharedPtr<A> shared = SharedPtr<A>(new A(5));
     Barrier *b = new Barrier(6);
     for (int i = 0; i < 5; i++) {
@@ -41,11 +40,32 @@ void kernel_main() {
     b->sync();
     printf("Main sees *shared = %x\n", shared->val);
     printf("Kernel main finished!\n");
-    */
-    char *buf = new char[512];
-    SharedPtr<Promise<bool>> sector_read_promise = read_write_disk(buf, 0, false);
-    ASSERT(sector_read_promise->get());
-    for (int i = 0; i < 512; i++) {
-        printf("%c", buf[i]);
+}
+
+void kernel_main() {
+    printf("START\n");
+    int N = 10;
+    SharedPtr<Barrier> b = SharedPtr<Barrier>(new Barrier(N+1));
+    for (int i = 0; i < N; i++) {
+        threads::kthread([b, i, N]() mutable {
+            char *buf = new char[512];
+            SharedPtr<Promise<bool>> sector_read_promise = read_write_disk(buf, 0, false);
+            ASSERT(sector_read_promise->get());
+            for (int j = 0; j < N; j++) {
+                if (j == i) {
+                    printf("Thread %d: \n", i);
+                    for (int i = 0; i < 512; i++) {
+                        printf("%c", buf[i]);
+                    }
+                    printf("\n");
+                }
+                b->sync();
+            }
+            delete[] buf;
+        });
     }
+    for (int j = 0; j < N; j++) {
+        b->sync();
+    }
+    printf("DONE\n");
 }

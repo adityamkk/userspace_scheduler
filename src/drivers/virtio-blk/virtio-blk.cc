@@ -2,6 +2,7 @@
 #include "virtio.h"
 #include "../../heap.h"
 #include "../../sync/pool.h"
+#include "../../pallocator.h"
 
 // https://operating-system-in-1000-lines.vercel.app/en/15-virtio-blk
 
@@ -107,7 +108,7 @@ SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_writ
     int status_id = *status_id_ptr;
 
     // Dynamically allocate a block request
-    paddr_t blk_req_paddr = (paddr_t)(new virtio_blk_req());
+    paddr_t blk_req_paddr = (paddr_t)(new virtio_blk_req()); //pallocator::alloc_page();
     struct virtio_blk_req * blk_req = (struct virtio_blk_req *) blk_req_paddr;
 
     // Construct the request according to the virtio-blk specification.
@@ -144,8 +145,12 @@ SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_writ
         printf("virtio: warn: failed to read/write sector=%d status=%d\n",
                sector, blk_req->status);
         delete blk_req;
+        pallocator::dealloc_pages(blk_req_paddr);
         SharedPtr<Promise<bool>> failure_promise = SharedPtr<Promise<bool>>(new Promise<bool>());
         failure_promise->set(false);
+        descriptor_pool.free(desc_id_ptr);
+        descriptor_pool.free(data_id_ptr);
+        descriptor_pool.free(status_id_ptr);
         return failure_promise;
     }
 
@@ -154,7 +159,11 @@ SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_writ
         memcpy(buf, blk_req->data, SECTOR_SIZE);
 
     delete blk_req;
+    //pallocator::dealloc_pages(blk_req_paddr);
     SharedPtr<Promise<bool>> success_promise = SharedPtr<Promise<bool>>(new Promise<bool>());
     success_promise->set(true);
+    descriptor_pool.free(desc_id_ptr);
+    descriptor_pool.free(data_id_ptr);
+    descriptor_pool.free(status_id_ptr);
     return success_promise;
 }

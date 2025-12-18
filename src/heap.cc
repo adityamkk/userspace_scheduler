@@ -41,6 +41,28 @@ void init(paddr_t start, size_t size) {
     free_list->next = 0;
 }
 
+void dump_free_list() {
+    ASSERT(free_list != nullptr);
+    heapLock.lock();
+    BlockHeader* current = free_list;
+    printf("-----------------------------------------\n");
+    printf("DUMPING FREE LIST starting at %x:\n", free_list);
+    while (current) {
+        if (current->free) {
+            printf("FREE BLOCK: start = %x, size = %d\n", ((uint8_t*)current) + 8, current->size);
+        } else {
+            printf("USED BLOCK: start = %x, size = %d\n", ((uint8_t*)current) + 8, current->size);
+        }
+        current = current->next;
+        if (current == free_list) {
+            printf("Somehow the list looped back around\n");
+            break;
+        }
+    }
+    printf("-----------------------------------------\n");
+    heapLock.unlock();
+}
+
 // ===========================================================
 // Allocate memory
 // ===========================================================
@@ -54,7 +76,7 @@ void* malloc(size_t size) {
         size = (size + 3) & ~3;
 
     heapLock.lock();
-    BlockHeader* prev = 0;
+    //BlockHeader* prev = 0;
     BlockHeader* current = free_list;
 
     while (current) {
@@ -78,17 +100,15 @@ void* malloc(size_t size) {
 
             current->free = 0;
 
-            // update free list head if necessary
-            if (prev == 0 && current->free == 0) {
-                free_list = current->next;
-            }
-
             heapLock.unlock();
             return (void*)(current + 1);
         }
 
-        prev = current;
+        //prev = current;
         current = current->next;
+        if (current == free_list) {
+            PANIC("out of kernel heap space!\n");
+        }
     }
 
     // no free block found
@@ -107,10 +127,6 @@ void free(void* ptr) {
     heapLock.lock();
     BlockHeader* block = ((BlockHeader*)ptr) - 1;
     block->free = 1;
-
-    // insert at front of free list
-    block->next = free_list;
-    free_list = block;
 
     // coalesce adjacent free blocks
     BlockHeader* current = free_list;
