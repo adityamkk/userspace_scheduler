@@ -22,7 +22,11 @@ template <typename T>
 class SharedPtr {
     ICB<T>* icb;
 public:
-    SharedPtr(T* ptr) {
+    SharedPtr() {
+        icb = nullptr;
+    }
+
+    explicit SharedPtr(T* ptr) {
         if (ptr == nullptr) {
             icb = nullptr;
         } else {
@@ -59,16 +63,25 @@ public:
 
     SharedPtr& operator=(const SharedPtr& other) {
         if (this == &other) {
-            return this;
-        }
-        this->~SharedPtr();
-        if (other.icb == nullptr) {
-            this->icb = nullptr;
+            this->icb = other.icb;
         } else {
-            other.icb->shared_count.fetch_add(1);
-            other.icb->total_count.fetch_add(1);
-            this->icb = other->icb;
+            this->~SharedPtr();
+            if (other.icb == nullptr) {
+                this->icb = nullptr;
+            } else {
+                other.icb->shared_count.fetch_add(1);
+                other.icb->total_count.fetch_add(1);
+                this->icb = other.icb;
+            }
         }
+        return *this;
+    }
+
+    SharedPtr& operator=(T* other) {
+        ASSERT(other == nullptr);
+        this->~SharedPtr();
+        this->icb = nullptr;
+        return *this;
     }
 
     T* operator->() {
@@ -96,6 +109,21 @@ public:
             return false;
         }
         return this->icb->value == other->icb->value;
+    }
+    
+    bool operator==(T* other) {
+        ASSERT(other == nullptr);
+        return this->icb == nullptr;
+    }
+
+    bool operator!=(const SharedPtr& other) {
+        return !(this->operator==(other));
+    }
+
+    
+    bool operator!=(T* other) {
+        ASSERT(other == nullptr);
+        return !(this->operator==(other));
     }
 
     const bool operator==(const SharedPtr& other) const {

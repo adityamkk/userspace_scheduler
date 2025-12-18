@@ -2,14 +2,15 @@
 #include "virtio.h"
 #include "../../heap.h"
 #include "../../sync/pool.h"
+#include "../../sync/syncmap.h"
 #include "../../pallocator.h"
 
 // https://operating-system-in-1000-lines.vercel.app/en/15-virtio-blk
 
 struct virtio_virtq *blk_request_vq; // Only 1 virtq, so this is global
 uint64_t blk_capacity; // Only 1 virtq, so this is global
-Pool<int> descriptor_pool; // Pool of descriptors per virtq
-
+Pool<int>* descriptor_pool; // Pool of descriptors per virtq
+SyncMap<int,SharedPtr<Promise<bool>>>* req_promises;
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Waddress-of-packed-member"
@@ -20,10 +21,13 @@ struct virtio_virtq *virtq_init(unsigned index) {
     vq->queue_index = index;
     vq->used_index = (volatile uint16_t *) &vq->used.index;
 
+    ASSERT(vq->avail.flags == 0);
     // Ideally descriptor_pool is per-virtq instead of global
+    descriptor_pool = new Pool<int>();
     for (int i = 0; i < VIRTQ_ENTRY_NUM; i++) {
-        descriptor_pool.free(new int(i)); // Mark this as an available descriptor
+        descriptor_pool->free(new int(i)); // Mark this as an available descriptor
     }
+    req_promises = new SyncMap<int,SharedPtr<Promise<bool>>>(VIRTQ_ENTRY_NUM);
     // 1. Select the queue writing its index (first queue is 0) to QueueSel.
     virtio_reg_write32(VIRTIO_REG_QUEUE_SEL, index);
     // 5. Notify the device about the queue size by writing the size to QueueNum.
@@ -91,13 +95,13 @@ SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_writ
     }
 
     // Collect 3 descriptors from the pool of descriptors
-    int* desc_id_ptr = descriptor_pool.allocate();
-    int* data_id_ptr = descriptor_pool.allocate();
-    int* status_id_ptr = descriptor_pool.allocate();
+    int* desc_id_ptr = descriptor_pool->allocate();
+    int* data_id_ptr = descriptor_pool->allocate();
+    int* status_id_ptr = descriptor_pool->allocate();
     if (desc_id_ptr == nullptr || data_id_ptr == nullptr || status_id_ptr == nullptr) {
-        descriptor_pool.free(desc_id_ptr);
-        descriptor_pool.free(data_id_ptr);
-        descriptor_pool.free(status_id_ptr);
+        descriptor_pool->free(desc_id_ptr);
+        descriptor_pool->free(data_id_ptr);
+        descriptor_pool->free(status_id_ptr);
         printf("virtio: warn: failed to allocate descriptors in virtq\n");
         SharedPtr<Promise<bool>> failure_promise = SharedPtr<Promise<bool>>(new Promise<bool>());
         failure_promise->set(false);
@@ -106,6 +110,7 @@ SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_writ
     int desc_id = *desc_id_ptr;
     int data_id = *data_id_ptr;
     int status_id = *status_id_ptr;
+    req_promises->put(desc_id, SharedPtr<Promise<bool>>(new Promise<bool>()));
 
     // Dynamically allocate a block request
     paddr_t blk_req_paddr = (paddr_t)(new virtio_blk_req()); //pallocator::alloc_page();
@@ -145,12 +150,13 @@ SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_writ
         printf("virtio: warn: failed to read/write sector=%d status=%d\n",
                sector, blk_req->status);
         delete blk_req;
-        pallocator::dealloc_pages(blk_req_paddr);
-        SharedPtr<Promise<bool>> failure_promise = SharedPtr<Promise<bool>>(new Promise<bool>());
+
+        SharedPtr<Promise<bool>> failure_promise = req_promises->get(desc_id);
         failure_promise->set(false);
-        descriptor_pool.free(desc_id_ptr);
-        descriptor_pool.free(data_id_ptr);
-        descriptor_pool.free(status_id_ptr);
+        req_promises->remove(desc_id);
+        descriptor_pool->free(desc_id_ptr);
+        descriptor_pool->free(data_id_ptr);
+        descriptor_pool->free(status_id_ptr);
         return failure_promise;
     }
 
@@ -159,11 +165,12 @@ SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_writ
         memcpy(buf, blk_req->data, SECTOR_SIZE);
 
     delete blk_req;
-    //pallocator::dealloc_pages(blk_req_paddr);
-    SharedPtr<Promise<bool>> success_promise = SharedPtr<Promise<bool>>(new Promise<bool>());
+
+    SharedPtr<Promise<bool>> success_promise = req_promises->get(desc_id);
     success_promise->set(true);
-    descriptor_pool.free(desc_id_ptr);
-    descriptor_pool.free(data_id_ptr);
-    descriptor_pool.free(status_id_ptr);
+    req_promises->remove(desc_id);
+    descriptor_pool->free(desc_id_ptr);
+    descriptor_pool->free(data_id_ptr);
+    descriptor_pool->free(status_id_ptr);
     return success_promise;
 }

@@ -23,4 +23,11 @@ public:
         mapLock.unlock();
         return value;
     }
+
+    bool remove(K key) {
+        mapLock.lock();
+        bool complete = map.remove(key);
+        mapLock.unlock();
+        return complete;
+    }
 };

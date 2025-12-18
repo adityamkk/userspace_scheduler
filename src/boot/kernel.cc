@@ -240,15 +240,14 @@ void kernel_init(void) {
     pallocator::init((paddr_t)(__free_ram + HEAP_SIZE), (size_t)(__free_ram_end - __free_ram - HEAP_SIZE)); // Initialize the physical memory allocator
     printf("| Initialized the physical memory allocator\n");
 
-    /* Global devices */
-    virtio_blk_init();
-
     /* Start secondary harts */
     printf("| Starting secondary harts...\n");
     start_secondary_harts();
 
     /* GLOBAL INIT */
     threads::init(); // Sets up idle threads, etc.
+
+    virtio_blk_init();
 
     /* Mark initialization complete with memory barrier to ensure secondary harts see it */
     __asm__ volatile("" : : : "memory");
