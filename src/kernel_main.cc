@@ -44,8 +44,8 @@ void shared_ptr_test() {
 
 void kernel_main() {
     printf("START\n");
-    int N = 10;
-    SharedPtr<Barrier> b = SharedPtr<Barrier>(new Barrier(N+1));
+    int N = 50;
+    SharedPtr<Barrier> b = SharedPtr<Barrier>(new Barrier(N));
     for (int i = 0; i < N; i++) {
         threads::kthread([b, i, N]() mutable {
             char *buf = new char[512];

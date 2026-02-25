@@ -19,6 +19,8 @@
 #define VIRTIO_REG_QUEUE_PFN     0x40
 #define VIRTIO_REG_QUEUE_READY   0x44
 #define VIRTIO_REG_QUEUE_NOTIFY  0x50
+#define VIRTIO_MMIO_INTERRUPT_STATUS  0x060
+#define VIRTIO_MMIO_INTERRUPT_ACK     0x064
 #define VIRTIO_REG_DEVICE_STATUS 0x70
 #define VIRTIO_REG_DEVICE_CONFIG 0x100
 #define VIRTIO_STATUS_ACK       1
@@ -30,6 +32,7 @@
 #define VIRTQ_AVAIL_F_NO_INTERRUPT 1
 #define VIRTIO_BLK_T_IN  0
 #define VIRTIO_BLK_T_OUT 1
+#define VIRTIO_IRQ 1
 
 // Virtqueue Descriptor area entry.
 struct virtq_desc {

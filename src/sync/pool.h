@@ -21,7 +21,6 @@ public:
     void free(T* val) {
         if (val != nullptr) {
             resources.push(val);
-            printf("Pushing val\n");
             sem.up();
         }
     }

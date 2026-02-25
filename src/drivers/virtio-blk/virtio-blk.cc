@@ -10,7 +10,30 @@
 struct virtio_virtq *blk_request_vq; // Only 1 virtq, so this is global
 uint64_t blk_capacity; // Only 1 virtq, so this is global
 Pool<int>* descriptor_pool; // Pool of descriptors per virtq
-SyncMap<int,SharedPtr<Promise<bool>>>* req_promises;
+
+struct BlockRequest {
+    SharedPtr<Promise<bool>> blk_promise;
+    void* buf;
+    uint32_t sector;
+    int is_write;
+    int desc_id;
+    int data_id;
+    int status_id;
+    struct virtio_blk_req * blk_req;
+
+    BlockRequest(void* buf, uint32_t sector, int is_write, int desc_id, int data_id, int status_id, paddr_t blk_req) {
+        blk_promise = SharedPtr<Promise<bool>>(new Promise<bool>());
+        this->buf = buf;
+        this->sector = sector;
+        this->is_write = is_write;
+        this->desc_id = desc_id;
+        this->data_id = data_id;
+        this->status_id = status_id;
+        this->blk_req = (struct virtio_blk_req *)blk_req;
+    }
+};
+
+SyncMap<int,SharedPtr<BlockRequest>>* req_promises;
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Waddress-of-packed-member"
@@ -27,7 +50,7 @@ struct virtio_virtq *virtq_init(unsigned index) {
     for (int i = 0; i < VIRTQ_ENTRY_NUM; i++) {
         descriptor_pool->free(new int(i)); // Mark this as an available descriptor
     }
-    req_promises = new SyncMap<int,SharedPtr<Promise<bool>>>(VIRTQ_ENTRY_NUM);
+    req_promises = new SyncMap<int,SharedPtr<BlockRequest>>(VIRTQ_ENTRY_NUM);
     // 1. Select the queue writing its index (first queue is 0) to QueueSel.
     virtio_reg_write32(VIRTIO_REG_QUEUE_SEL, index);
     // 5. Notify the device about the queue size by writing the size to QueueNum.
@@ -68,14 +91,14 @@ void virtio_blk_init(void) {
 
 // Notifies the device that there is a new request. `desc_index` is the index
 // of the head descriptor of the new request.
-Spinlock kickLock;
+SpinlockNoInterrupts kickLock;
 void virtq_kick(struct virtio_virtq *vq, int desc_index) {
     kickLock.lock();
     vq->avail.ring[vq->avail.index % VIRTQ_ENTRY_NUM] = desc_index;
     vq->avail.index++;
     __sync_synchronize();
-    virtio_reg_write32(VIRTIO_REG_QUEUE_NOTIFY, vq->queue_index);
-    vq->last_used_index++;
+    virtio_reg_write32(VIRTIO_REG_QUEUE_NOTIFY, vq->queue_index); // Interrupts
+    //vq->last_used_index++; // Comment out line for Interrupts, uncomment for Polling
     kickLock.unlock();
 }
 
@@ -107,14 +130,15 @@ SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_writ
         failure_promise->set(false);
         return failure_promise;
     }
-    int desc_id = *desc_id_ptr;
+    int desc_id = *desc_id_ptr; // TODO: Delete the pointers here
     int data_id = *data_id_ptr;
     int status_id = *status_id_ptr;
-    req_promises->put(desc_id, SharedPtr<Promise<bool>>(new Promise<bool>()));
 
     // Dynamically allocate a block request
     paddr_t blk_req_paddr = (paddr_t)(new virtio_blk_req()); //pallocator::alloc_page();
     struct virtio_blk_req * blk_req = (struct virtio_blk_req *) blk_req_paddr;
+
+    req_promises->put(desc_id, SharedPtr<BlockRequest>(new BlockRequest(buf, sector, is_write, desc_id, data_id, status_id, blk_req_paddr)));
 
     // Construct the request according to the virtio-blk specification.
     blk_req->sector = sector;
@@ -139,8 +163,10 @@ SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_writ
     vq->descs[status_id].flags = VIRTQ_DESC_F_WRITE;
 
     // Notify the device that there is a new request.
+    printf("Kick\n");
     virtq_kick(vq, desc_id);
 
+    /*
     // Wait until the device finishes processing.
     while (virtq_is_busy(vq))
         ;
@@ -151,7 +177,7 @@ SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_writ
                sector, blk_req->status);
         delete blk_req;
 
-        SharedPtr<Promise<bool>> failure_promise = req_promises->get(desc_id);
+        SharedPtr<Promise<bool>> failure_promise = req_promises->get(desc_id)->blk_promise;
         failure_promise->set(false);
         req_promises->remove(desc_id);
         descriptor_pool->free(desc_id_ptr);
@@ -165,12 +191,53 @@ SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_writ
         memcpy(buf, blk_req->data, SECTOR_SIZE);
 
     delete blk_req;
-
-    SharedPtr<Promise<bool>> success_promise = req_promises->get(desc_id);
+    */
+    printf("Setting success promise for desc_id = %d\n", desc_id);
+    SharedPtr<Promise<bool>> success_promise = req_promises->get(desc_id)->blk_promise;
+    printf("Set success promise for desc_id = %d\n", desc_id);
+    /*
     success_promise->set(true);
     req_promises->remove(desc_id);
     descriptor_pool->free(desc_id_ptr);
     descriptor_pool->free(data_id_ptr);
     descriptor_pool->free(status_id_ptr);
+    */
     return success_promise;
+}
+
+// TODO: Need to make this O(1)
+void virtio_blk_isr() {
+    struct virtio_virtq *vq = blk_request_vq;
+    printf("ISR Gotten!!!\n");
+    while (vq->last_used_index < *vq->used_index) {
+        // Process the used entry
+        int desc_id = (int)vq->used.ring[vq->last_used_index % VIRTQ_ENTRY_NUM].id;
+        printf("ISR Processing used entry for desc_id = %d\n", desc_id);
+        SharedPtr<BlockRequest> request = req_promises->get(desc_id);
+        SharedPtr<Promise<bool>> promise = request->blk_promise;
+        ASSERT(promise != nullptr);
+        if (request->blk_req->status != 0) {
+            printf("virtio: warn: failed to read/write sector=%d status=%d\n",
+                request->sector, request->blk_req->status);
+            delete request->blk_req;
+
+            // req_promises->remove(desc_id); // Why remove the request? Don't I still need it in the readwrite?
+            descriptor_pool->free(new int(request->desc_id));
+            descriptor_pool->free(new int(request->data_id));
+            descriptor_pool->free(new int(request->status_id));
+            promise->set(false);
+            vq->last_used_index++;
+            return;
+        }
+        // req_promises->remove(desc_id); // // Why remove the request? Don't I still need it in the readwrite?
+        descriptor_pool->free(new int(request->desc_id));
+        descriptor_pool->free(new int(request->data_id));
+        descriptor_pool->free(new int(request->status_id));
+        if (!request->is_write) {
+            memcpy(request->buf, request->blk_req->data, SECTOR_SIZE);
+        }
+        printf("Setting promise to true for desc_id = %d\n", desc_id);
+        promise->set(true);
+        vq->last_used_index++;
+    }
 }
