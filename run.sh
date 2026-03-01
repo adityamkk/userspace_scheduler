@@ -60,5 +60,12 @@ OTHER_OBJ=$(find "$ODIR" -type f -name '*.o' -print | grep -v "boot.o")
 OBJ_FILES="$BOOT_OBJ $OTHER_OBJ"
 $CPP $CCFLAGS -Wl,-T$CDIR/kernel.ld -Wl,-Map=$ODIR/kernel.map $OBJ_FILES -o $ODIR/kernel.elf
 
+# Build filesystem
+./fat32.sh
+DISK_IMAGE=fat32.img
+
 # Run QEMU
-$QEMU -machine virt -bios default -nographic -serial mon:stdio --no-reboot -smp $QEMU_SMP -kernel $ODIR/kernel.elf
+$QEMU -machine virt -bios default -nographic -serial mon:stdio --no-reboot -smp $QEMU_SMP \
+    -drive id=drive0,file=$DISK_IMAGE,format=raw,if=none \
+    -device virtio-blk-device,drive=drive0,bus=virtio-mmio-bus.0 \
+    -kernel $ODIR/kernel.elf

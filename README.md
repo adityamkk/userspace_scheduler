@@ -7,7 +7,17 @@ An in-progress kernel for the RISC-V 32-bit ISA implemented via OpenSBI.
 - Semaphores, Mutexes, Promises, Reusable Barriers
 - Shared Pointers
 
-## In Progress
-- Software Interrupts from the PLIC (Platform-Level Interrupt Controller)
-- virtio-blk disk driver with DMA
-- FAT32 Filesystem
+## Install Instructions on Linux
+
+Install the following via your package manager's commands (below I use Debian/Ubuntu as an example)
+```
+sudo apt install qemu-system-riscv32
+sudo apt install riscv64-unknown-elf-gcc
+sudo apt install riscv64-unknown-elf-g++
+sudo apt install mtools dosfstools
+```
+
+In the root directory, download OpenSBI
+```
+curl -LO https://github.com/qemu/qemu/raw/v8.0.4/pc-bios/opensbi-riscv32-generic-fw_dynamic.bin
+```

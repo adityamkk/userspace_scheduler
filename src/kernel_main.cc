@@ -4,12 +4,23 @@
 #include "sync/barrier.h"
 #include "sync/promise.h"
 #include "sync/shared.h"
+#include "drivers/virtio-blk/virtio-blk.h"
 
 void busy_work(uint64_t iterations)
 {
     volatile uint64_t x = 0;
     for (uint64_t i = 0; i < iterations; i++) {
         x += i;
+    }
+}
+
+void preemption_test() {
+    for (int i = 0; i < 7; i++) {
+        threads::kthread([i] {
+            printf("Thread %d started...\n", i);
+            busy_work(99999999);
+            printf("Thread %d finished!!!\n", i);
+        });
     }
 }
 
@@ -22,7 +33,7 @@ struct A {
     }
 };
 
-void kernel_main() {
+void shared_ptr_test() {
     SharedPtr<A> shared = SharedPtr<A>(new A(5));
     Barrier *b = new Barrier(6);
     for (int i = 0; i < 5; i++) {
@@ -39,4 +50,34 @@ void kernel_main() {
     b->sync();
     printf("Main sees *shared = %x\n", shared->val);
     printf("Kernel main finished!\n");
+}
+
+void kernel_main() {
+    printf("START\n");
+    int N = 10;
+    SharedPtr<Barrier> b = SharedPtr<Barrier>(new Barrier(N+1));
+    for (int i = 0; i < N; i++) {
+        threads::kthread([b, i, N]() mutable {
+            char *buf = new char[512];
+            SharedPtr<Promise<bool>> sector_read_promise = read_write_disk(buf, 0, false);
+            ASSERT(sector_read_promise->get());
+            for (int j = 0; j < N; j++) {
+                if (j == i) {
+                    printf("Thread %d: \n", i);
+                    for (int i = 0; i < 100; i++) {
+                        printf("%c", buf[i]);
+                    }
+                    printf("\n");
+                }
+                //printf("T%d reached...\n", i);
+                b->sync();
+            }
+            delete[] buf;
+        });
+    }
+    for (int j = 0; j < N; j++) {
+        //printf("Outside reached...\n");
+        b->sync();
+    }
+    printf("DONE\n");
 }

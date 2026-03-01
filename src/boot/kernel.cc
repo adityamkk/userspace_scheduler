@@ -5,6 +5,9 @@
 #include "../threads/threads.h"
 #include "../kernel_main.h"
 #include "pit.h"
+#include "../drivers/virtio-blk/virtio-blk.h"
+#include "../drivers/virtio-blk/virtio.h"
+#include "plic.h"
 
 typedef unsigned char uint8_t;
 typedef unsigned int uint32_t;
@@ -198,7 +201,6 @@ void handle_trap(struct trap_frame *f) {
     uint32_t stval = READ_CSR(stval);
     uint32_t user_pc = READ_CSR(sepc);
     ASSERT(pit::are_interrupts_disabled());
-
     if (scause & 0x80000000) {
         // Async interrupt
         uint32_t code = scause & 0xFF;
@@ -214,8 +216,47 @@ void handle_trap(struct trap_frame *f) {
             ASSERT(enter_smp == exit_smp);
             pit::pit_handler();
             return;
+        } else if (code == 9) {
+            // External interrupt from the PLIC
+            printf("Interrupt Shouldn't Occur when Polling...\n");
+            ASSERT(smp::me() == 0);
+            uint32_t irq = plic::plic_claim(0);
+            if (irq == VIRTIO_IRQ) {
+                //printf("GOT IRQ\n");
+                uint32_t isr = virtio_reg_read32(VIRTIO_MMIO_INTERRUPT_STATUS);
+                if (isr & 1) {
+                    //printf("GOT ISR\n");
+                    virtio_blk_isr();
+                }
+                virtio_reg_write32(VIRTIO_MMIO_INTERRUPT_ACK, isr);
+                plic::plic_complete(0, irq);
+                return;
+            }
         }
     }
+    /*
+    void virtio_blk_irq() {
+        uint32_t isr = mmio_read(VIRTIO_MMIO_INTERRUPT_STATUS);
+        if (!(isr & 1))
+            return;
+
+        // Process all completed entries
+        while (last_used_idx != used->idx) {
+            uint16_t idx = last_used_idx % QUEUE_SIZE;
+            uint32_t desc_id = used->ring[idx].id;
+
+            VirtioBlkRequest* req = req_for_desc[desc_id];
+
+            req->completed = true;
+            wake(req->waiting_thread);
+
+            free_desc_chain(desc_id);
+            last_used_idx++;
+        }
+
+        mmio_write(VIRTIO_MMIO_INTERRUPT_ACK, isr);
+    }
+    */
 
     PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
 }
@@ -245,6 +286,12 @@ void kernel_init(void) {
 
     /* GLOBAL INIT */
     threads::init(); // Sets up idle threads, etc.
+
+    virtio_blk_init();
+
+    /* Enable Interrupts */
+    //printf("| Enabling global interrupts\n");
+    //plic::init();
 
     /* Mark initialization complete with memory barrier to ensure secondary harts see it */
     __asm__ volatile("" : : : "memory");

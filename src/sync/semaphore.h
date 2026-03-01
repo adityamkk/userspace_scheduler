@@ -7,7 +7,7 @@
 class Semaphore {
     volatile int n;
 public:
-    SpinlockNoInterrupts lock;
+    Spinlock lock; // NoInterrupts (SpinlockNoInterrupts may cause issues with the virtio-blk device isr)
     SyncQueue<threads::TCB> blocked_threads;
     Semaphore(int n);
     void down();

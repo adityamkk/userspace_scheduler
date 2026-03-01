@@ -41,6 +41,28 @@ void init(paddr_t start, size_t size) {
     free_list->next = 0;
 }
 
+void dump_free_list() {
+    ASSERT(free_list != nullptr);
+    heapLock.lock();
+    BlockHeader* current = free_list;
+    printf("-----------------------------------------\n");
+    printf("DUMPING FREE LIST starting at %x:\n", free_list);
+    while (current) {
+        if (current->free) {
+            printf("FREE BLOCK: start = %x, size = %d\n", ((uint8_t*)current) + 8, current->size);
+        } else {
+            printf("USED BLOCK: start = %x, size = %d\n", ((uint8_t*)current) + 8, current->size);
+        }
+        current = current->next;
+        if (current == free_list) {
+            printf("Somehow the list looped back around\n");
+            break;
+        }
+    }
+    printf("-----------------------------------------\n");
+    heapLock.unlock();
+}
+
 // ===========================================================
 // Allocate memory
 // ===========================================================
@@ -54,7 +76,7 @@ void* malloc(size_t size) {
         size = (size + 3) & ~3;
 
     heapLock.lock();
-    BlockHeader* prev = 0;
+    //BlockHeader* prev = 0;
     BlockHeader* current = free_list;
 
     while (current) {
@@ -78,17 +100,15 @@ void* malloc(size_t size) {
 
             current->free = 0;
 
-            // update free list head if necessary
-            if (prev == 0 && current->free == 0) {
-                free_list = current->next;
-            }
-
             heapLock.unlock();
             return (void*)(current + 1);
         }
 
-        prev = current;
+        //prev = current;
         current = current->next;
+        if (current == free_list) {
+            PANIC("out of kernel heap space!\n");
+        }
     }
 
     // no free block found
@@ -107,10 +127,6 @@ void free(void* ptr) {
     heapLock.lock();
     BlockHeader* block = ((BlockHeader*)ptr) - 1;
     block->free = 1;
-
-    // insert at front of free list
-    block->next = free_list;
-    free_list = block;
 
     // coalesce adjacent free blocks
     BlockHeader* current = free_list;
@@ -147,11 +163,29 @@ void* operator new(size_t size) {
     return p;
 }
 
+void* operator new(size_t size, std::align_val_t align) {
+    // For simplicity, allocate extra space and align manually
+    size_t alignment = static_cast<size_t>(align);
+    void* p = heap::malloc(size + alignment);
+    if (p == 0) PANIC("out of memory");
+    uintptr_t addr = reinterpret_cast<uintptr_t>(p);
+    uintptr_t aligned_addr = (addr + alignment - 1) & ~(alignment - 1);
+    return reinterpret_cast<void*>(aligned_addr);
+}
+
 void operator delete(void* p) noexcept {
     return heap::free(p);
 }
 
 void operator delete(void* p, size_t sz) {
+    return heap::free(p);
+}
+
+void operator delete(void* p, std::align_val_t align) noexcept {
+    return heap::free(p);
+}
+
+void operator delete(void* p, size_t sz, std::align_val_t align) {
     return heap::free(p);
 }
 
@@ -161,10 +195,27 @@ void* operator new[](size_t size) {
     return p;
 }
 
+void* operator new[](size_t size, std::align_val_t align) {
+    size_t alignment = static_cast<size_t>(align);
+    void* p = heap::malloc(size + alignment);
+    if (p == 0) PANIC("out of memory");
+    uintptr_t addr = reinterpret_cast<uintptr_t>(p);
+    uintptr_t aligned_addr = (addr + alignment - 1) & ~(alignment - 1);
+    return reinterpret_cast<void*>(aligned_addr);
+}
+
 void operator delete[](void* p) noexcept {
     return heap::free(p);
 }
 
 void operator delete[](void* p, size_t sz) {
+    return heap::free(p);
+}
+
+void operator delete[](void* p, std::align_val_t align) noexcept {
+    return heap::free(p);
+}
+
+void operator delete[](void* p, size_t sz, std::align_val_t align) {
     return heap::free(p);
 }

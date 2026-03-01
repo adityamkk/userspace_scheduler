@@ -8,7 +8,7 @@ template <typename K, typename V>
 class SyncMap {
     HashMap<K, V> map;
     Mutex mapLock;
-
+public:
     SyncMap(uint32_t num_buckets) : map(num_buckets), mapLock() {}
 
     void put(K key, V value) {
@@ -22,5 +22,12 @@ class SyncMap {
         V value = map.get(key);
         mapLock.unlock();
         return value;
+    }
+
+    bool remove(K key) {
+        mapLock.lock();
+        bool complete = map.remove(key);
+        mapLock.unlock();
+        return complete;
     }
 };

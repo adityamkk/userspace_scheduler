@@ -6,10 +6,10 @@ Semaphore::Semaphore(int n) : n(n), lock() {}
 
 // Decrement the integer, if it goes below 0 then block
 void Semaphore::down() {
-    // TODO: Disable interrupts
+    bool was = pit::disable_interrupts();
     threads::TCB* my_thread = threads::hartstates.mine().current_thread;
     my_thread->setPreemption(false);
-    // TODO: Enable interrupts
+    pit::restore_interrupts(was);
     lock.lock();
     n = n - 1;
     if (n < 0) {
@@ -27,14 +27,19 @@ void Semaphore::down() {
     } else {
         lock.unlock();
     }
-    my_thread->setPreemption(true);
+    was = pit::disable_interrupts();
+    if (my_thread != threads::hartstates.mine().idle_thread) {
+        my_thread->setPreemption(true);
+    }
+    pit::restore_interrupts(was);
 }
 
 void Semaphore::up() {
-    // TODO: Disable interrupts
+    bool was = pit::disable_interrupts();
     threads::TCB* my_thread = threads::hartstates.mine().current_thread;
     my_thread->setPreemption(false);
-    // TODO: Enable interrupts
+    pit::restore_interrupts(was);
+
     lock.lock();
     n = n + 1;
     if (n <= 0) {
@@ -43,5 +48,9 @@ void Semaphore::up() {
         scheduler::schedule(blocked_thread);
     }
     lock.unlock();
-    my_thread->setPreemption(true);
+    was = pit::disable_interrupts();
+    if (my_thread != threads::hartstates.mine().idle_thread) {
+        my_thread->setPreemption(true);
+    }
+    pit::restore_interrupts(was);
 }
