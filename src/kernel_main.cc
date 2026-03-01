@@ -14,6 +14,16 @@ void busy_work(uint64_t iterations)
     }
 }
 
+void preemption_test() {
+    for (int i = 0; i < 7; i++) {
+        threads::kthread([i] {
+            printf("Thread %d started...\n", i);
+            busy_work(99999999);
+            printf("Thread %d finished!!!\n", i);
+        });
+    }
+}
+
 struct A {
     int val;
     A(int val) : val(val) {}
@@ -44,8 +54,8 @@ void shared_ptr_test() {
 
 void kernel_main() {
     printf("START\n");
-    int N = 50;
-    SharedPtr<Barrier> b = SharedPtr<Barrier>(new Barrier(N));
+    int N = 10;
+    SharedPtr<Barrier> b = SharedPtr<Barrier>(new Barrier(N+1));
     for (int i = 0; i < N; i++) {
         threads::kthread([b, i, N]() mutable {
             char *buf = new char[512];
@@ -54,17 +64,19 @@ void kernel_main() {
             for (int j = 0; j < N; j++) {
                 if (j == i) {
                     printf("Thread %d: \n", i);
-                    for (int i = 0; i < 512; i++) {
+                    for (int i = 0; i < 100; i++) {
                         printf("%c", buf[i]);
                     }
                     printf("\n");
                 }
+                //printf("T%d reached...\n", i);
                 b->sync();
             }
             delete[] buf;
         });
     }
     for (int j = 0; j < N; j++) {
+        //printf("Outside reached...\n");
         b->sync();
     }
     printf("DONE\n");

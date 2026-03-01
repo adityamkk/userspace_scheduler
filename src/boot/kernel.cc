@@ -218,7 +218,7 @@ void handle_trap(struct trap_frame *f) {
             return;
         } else if (code == 9) {
             // External interrupt from the PLIC
-            printf("GOT EXTERNAL INTERRUPT!!!\n");
+            printf("Interrupt Shouldn't Occur when Polling...\n");
             ASSERT(smp::me() == 0);
             uint32_t irq = plic::plic_claim(0);
             if (irq == VIRTIO_IRQ) {
@@ -290,8 +290,8 @@ void kernel_init(void) {
     virtio_blk_init();
 
     /* Enable Interrupts */
-    printf("| Enabling global interrupts\n");
-    plic::init();
+    //printf("| Enabling global interrupts\n");
+    //plic::init();
 
     /* Mark initialization complete with memory barrier to ensure secondary harts see it */
     __asm__ volatile("" : : : "memory");

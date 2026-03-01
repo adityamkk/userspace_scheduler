@@ -98,7 +98,7 @@ void virtq_kick(struct virtio_virtq *vq, int desc_index) {
     vq->avail.index++;
     __sync_synchronize();
     virtio_reg_write32(VIRTIO_REG_QUEUE_NOTIFY, vq->queue_index); // Interrupts
-    //vq->last_used_index++; // Comment out line for Interrupts, uncomment for Polling
+    vq->last_used_index++; // Comment out line for Interrupts, uncomment for Polling
     kickLock.unlock();
 }
 
@@ -163,10 +163,9 @@ SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_writ
     vq->descs[status_id].flags = VIRTQ_DESC_F_WRITE;
 
     // Notify the device that there is a new request.
-    printf("Kick\n");
+    //printf("Kick\n");
     virtq_kick(vq, desc_id);
 
-    /*
     // Wait until the device finishes processing.
     while (virtq_is_busy(vq))
         ;
@@ -191,28 +190,23 @@ SharedPtr<Promise<bool>> read_write_disk(void *buf, unsigned sector, int is_writ
         memcpy(buf, blk_req->data, SECTOR_SIZE);
 
     delete blk_req;
-    */
-    printf("Setting success promise for desc_id = %d\n", desc_id);
     SharedPtr<Promise<bool>> success_promise = req_promises->get(desc_id)->blk_promise;
-    printf("Set success promise for desc_id = %d\n", desc_id);
-    /*
     success_promise->set(true);
     req_promises->remove(desc_id);
     descriptor_pool->free(desc_id_ptr);
     descriptor_pool->free(data_id_ptr);
     descriptor_pool->free(status_id_ptr);
-    */
     return success_promise;
 }
 
 // TODO: Need to make this O(1)
 void virtio_blk_isr() {
     struct virtio_virtq *vq = blk_request_vq;
-    printf("ISR Gotten!!!\n");
+    //printf("ISR Gotten!!!\n");
     while (vq->last_used_index < *vq->used_index) {
         // Process the used entry
         int desc_id = (int)vq->used.ring[vq->last_used_index % VIRTQ_ENTRY_NUM].id;
-        printf("ISR Processing used entry for desc_id = %d\n", desc_id);
+        //printf("ISR Processing used entry for desc_id = %d\n", desc_id);
         SharedPtr<BlockRequest> request = req_promises->get(desc_id);
         SharedPtr<Promise<bool>> promise = request->blk_promise;
         ASSERT(promise != nullptr);
@@ -236,7 +230,7 @@ void virtio_blk_isr() {
         if (!request->is_write) {
             memcpy(request->buf, request->blk_req->data, SECTOR_SIZE);
         }
-        printf("Setting promise to true for desc_id = %d\n", desc_id);
+        //printf("Setting promise to true for desc_id = %d\n", desc_id);
         promise->set(true);
         vq->last_used_index++;
     }
